@@ -105,7 +105,7 @@ function formatPost(item) {
   const tags = detectTags(item.title);
   const impact = detectImpact(item.title);
 
-  return `📰 <b>WAI MARKET NEWS</b>
+ return `📰 <b>WAI MARKET NEWS</b>
 
 <b>${title}</b>
 
@@ -120,9 +120,28 @@ ${impact}
 🔗 <b>Source:</b>
 ${link}
 
-${tags}`;
-}
+return `📰 <b>WAI MARKET NEWS</b>
 
+<b>${title}</b>
+
+${impact}
+
+🔎 <b>What to watch:</b>
+• Whale transfers
+• Exchange inflows/outflows
+• BTC & ETH reaction
+• Smart money positioning
+
+🔗 <b>Source:</b>
+${link}
+
+━━━━━━━━━━━━━━
+
+🐋 Powered by WAI Intelligence
+📡 Smart Money Monitoring Active
+📰 #CryptoNews #WAI #SmartMoney
+`;
+}
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
     console.log("Missing TELEGRAM_CHANNEL_ID");
