@@ -107,13 +107,6 @@ function formatPost(item) {
 
 🔥 ${impact}`;
 }
-
-🔗 ${link}
-
-━━━━━━━━━━━━━━
-🐋 WAI Intelligence
-📰 #CryptoNews #WAI #SmartMoney`;
-}
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
     console.log("Missing TELEGRAM_CHANNEL_ID");
