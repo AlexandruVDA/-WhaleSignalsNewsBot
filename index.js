@@ -104,26 +104,15 @@ function formatPost(item) {
   const link = item.link || "";
   const impact = detectImpact(item.title);
 
-  return `📰 <b>WAI MARKET NEWS</b>
-
-<b>${title}</b>
+ return `📰 <b>${title}</b>
 
 ${impact}
 
-🔎 <b>What to watch:</b>
-• Whale transfers
-• Exchange inflows/outflows
-• BTC & ETH reaction
-• Smart money positioning
-
-🔗 <b>Source:</b>
-${link}
+🔗 ${link}
 
 ━━━━━━━━━━━━━━
-🐋 Powered by WAI Intelligence
-🛰️ Smart Money Monitoring
-📰 #CryptoNews #WAI #SmartMoney
-`;
+🐋 WAI Intelligence
+📰 #CryptoNews #WAI #SmartMoney`;
 }
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
