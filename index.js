@@ -101,12 +101,12 @@ function detectImpact(title = "") {
 
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
-  const link = item.link || "";
-  const impact = detectImpact(item.title);
+  const impact = "MEDIUM IMPACT";
 
-return `📰 <b>${title}</b>
+  return `📰 <b>${title}</b>
 
 🔥 ${impact}`;
+}
 
 🔗 ${link}
 
