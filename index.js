@@ -18,36 +18,109 @@ const FEEDS = [
 ];
 
 function loadPosted() {
-  if (!fs.existsSync(POSTED_FILE)) return [];
-  return JSON.parse(fs.readFileSync(POSTED_FILE, "utf8"));
+  try {
+    if (!fs.existsSync(POSTED_FILE)) return [];
+    return JSON.parse(fs.readFileSync(POSTED_FILE, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 function savePosted(items) {
-  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-200), null, 2));
+  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-300), null, 2));
 }
 
 function cleanText(text = "") {
-  return text
+  return String(text)
     .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 }
 
+function escapeHtml(text = "") {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function detectTags(title = "") {
+  const t = title.toLowerCase();
+  const tags = ["#WAI", "#Crypto", "#WhaleSignals"];
+
+  if (t.includes("bitcoin") || t.includes("btc")) tags.push("#BTC");
+  if (t.includes("ethereum") || t.includes("eth")) tags.push("#ETH");
+  if (t.includes("binance") || t.includes("bnb")) tags.push("#BNB");
+  if (t.includes("solana") || t.includes("sol")) tags.push("#SOL");
+  if (t.includes("xrp")) tags.push("#XRP");
+  if (t.includes("etf")) tags.push("#ETF");
+  if (t.includes("hack") || t.includes("exploit")) tags.push("#Security");
+  if (t.includes("whale") || t.includes("wallet")) tags.push("#SmartMoney");
+
+  return [...new Set(tags)].join(" ");
+}
+
+function detectImpact(title = "") {
+  const t = title.toLowerCase();
+
+  if (
+    t.includes("hack") ||
+    t.includes("exploit") ||
+    t.includes("lawsuit") ||
+    t.includes("sec") ||
+    t.includes("ban")
+  ) {
+    return "⚠️ <b>Risk Watch:</b>\nThis update may increase volatility. Monitor exchange flows, whale exits and liquidity movement.";
+  }
+
+  if (
+    t.includes("etf") ||
+    t.includes("approval") ||
+    t.includes("listing") ||
+    t.includes("partnership")
+  ) {
+    return "📈 <b>Market Impact:</b>\nPotential positive catalyst. Watch smart money accumulation and major wallet activity.";
+  }
+
+  if (
+    t.includes("price") ||
+    t.includes("surge") ||
+    t.includes("rally") ||
+    t.includes("drops") ||
+    t.includes("crash")
+  ) {
+    return "📊 <b>Market Impact:</b>\nPrice-sensitive update. Watch BTC, ETH and large-cap liquidity reaction.";
+  }
+
+  return "🐋 <b>WAI Intelligence:</b>\nA relevant crypto market update was detected. Monitor whale activity, exchange flows and smart money reaction.";
+}
+
 function formatPost(item) {
-  const title = cleanText(item.title);
-  const link = item.link;
+  const title = escapeHtml(cleanText(item.title));
+  const link = item.link || "";
+  const tags = detectTags(item.title);
+  const impact = detectImpact(item.title);
 
-  return `📰 WAI NEWS
+  return `📰 <b>WAI MARKET NEWS</b>
 
-${title}
+<b>${title}</b>
 
-🤖 WAI Summary:
-Important crypto market update detected. Traders should monitor market reaction and smart money activity.
+${impact}
 
-🔗 Source:
+🔎 <b>What to watch:</b>
+• Whale transfers
+• Exchange inflows/outflows
+• BTC & ETH reaction
+• Smart money positioning
+
+🔗 <b>Source:</b>
 ${link}
 
-#WAI #Crypto #WhaleSignals`;
+${tags}`;
 }
 
 async function checkNews() {
@@ -61,16 +134,16 @@ async function checkNews() {
   for (const feedUrl of FEEDS) {
     try {
       const feed = await parser.parseURL(feedUrl);
-      const items = feed.items.slice(0, 3);
+      const items = feed.items.slice(0, 5);
 
       for (const item of items) {
         const id = item.guid || item.link || item.title;
-
         if (!id || posted.includes(id)) continue;
 
         const message = formatPost(item);
 
         await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
+          parse_mode: "HTML",
           disable_web_page_preview: false
         });
 
@@ -98,8 +171,39 @@ bot.onText(/\/status/, (msg) => {
 
 Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
-Feeds: ${FEEDS.length}`
+Feeds: ${FEEDS.length}
+
+Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}`
   );
+});
+
+bot.onText(/\/testnews/, async (msg) => {
+  if (!TELEGRAM_CHANNEL_ID) {
+    return bot.sendMessage(msg.chat.id, "❌ TELEGRAM_CHANNEL_ID missing");
+  }
+
+  await bot.sendMessage(
+    TELEGRAM_CHANNEL_ID,
+    `📰 <b>WAI MARKET NEWS TEST</b>
+
+<b>Bot connection test completed successfully.</b>
+
+🐋 <b>WAI Intelligence:</b>
+The WAI News Bot is connected to the official WAI News channel.
+
+🔎 <b>Status:</b>
+• Telegram: Online ✅
+• Railway: Online ✅
+• News Feed: Active ✅
+
+#WAI #Crypto #WhaleSignals`,
+    {
+      parse_mode: "HTML",
+      disable_web_page_preview: true
+    }
+  );
+
+  bot.sendMessage(msg.chat.id, "✅ Test news sent");
 });
 
 console.log("WAI News Bot started");
