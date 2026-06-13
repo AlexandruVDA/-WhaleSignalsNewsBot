@@ -104,13 +104,13 @@ function formatPost(item) {
   const link = item.link || "";
   const impact = "MEDIUM IMPACT";
 
-  return `📰 <b>${title}</b>
-
+  return `📰 <b>${title}</b>`;
 🔥 ${impact}
 
-${link}`;
-
+<a href="${link}">Read full article</a>`;
 }
+
+
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
     console.log("Missing TELEGRAM_CHANNEL_ID");
