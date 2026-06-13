@@ -136,12 +136,10 @@ ${impact}
 ${link}
 
 ━━━━━━━━━━━━━━
-
 🐋 Powered by WAI Intelligence
-📡 Smart Money Monitoring Active
-📰 #CryptoNews #WAI #SmartMoney
+🛰️ Smart Money Monitoring
+📰 #CryptoNews #WAI #SmartMoney ${tags}
 `;
-}
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
     console.log("Missing TELEGRAM_CHANNEL_ID");
