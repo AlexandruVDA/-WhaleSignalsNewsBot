@@ -13,8 +13,7 @@ const POSTED_FILE = "posted.json";
 
 const FEEDS = [
   "https://cointelegraph.com/rss",
-  "https://www.coindesk.com/arc/outboundfeeds/rss/",
-  "https://www.binance.com/en/support/announcement/c-48?navId=48"
+  "https://www.coindesk.com/arc/outboundfeeds/rss/"
 ];
 
 function loadPosted() {
@@ -48,68 +47,17 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
-function detectTags(title = "") {
-  const t = title.toLowerCase();
-  const tags = ["#WAI", "#Crypto", "#WhaleSignals"];
-
-  if (t.includes("bitcoin") || t.includes("btc")) tags.push("#BTC");
-  if (t.includes("ethereum") || t.includes("eth")) tags.push("#ETH");
-  if (t.includes("binance") || t.includes("bnb")) tags.push("#BNB");
-  if (t.includes("solana") || t.includes("sol")) tags.push("#SOL");
-  if (t.includes("xrp")) tags.push("#XRP");
-  if (t.includes("etf")) tags.push("#ETF");
-  if (t.includes("hack") || t.includes("exploit")) tags.push("#Security");
-  if (t.includes("whale") || t.includes("wallet")) tags.push("#SmartMoney");
-
-  return [...new Set(tags)].join(" ");
-}
-
-function detectImpact(title = "") {
-  const t = title.toLowerCase();
-
-  if (
-    t.includes("hack") ||
-    t.includes("exploit") ||
-    t.includes("lawsuit") ||
-    t.includes("sec") ||
-    t.includes("ban")
-  ) {
-    return "⚠️ <b>Risk Watch:</b>\nThis update may increase volatility. Monitor exchange flows, whale exits and liquidity movement.";
-  }
-
-  if (
-    t.includes("etf") ||
-    t.includes("approval") ||
-    t.includes("listing") ||
-    t.includes("partnership")
-  ) {
-    return "📈 <b>Market Impact:</b>\nPotential positive catalyst. Watch smart money accumulation and major wallet activity.";
-  }
-
-  if (
-    t.includes("price") ||
-    t.includes("surge") ||
-    t.includes("rally") ||
-    t.includes("drops") ||
-    t.includes("crash")
-  ) {
-    return "📊 <b>Market Impact:</b>\nPrice-sensitive update. Watch BTC, ETH and large-cap liquidity reaction.";
-  }
-
-  return "🐋 <b>WAI Intelligence:</b>\nA relevant crypto market update was detected. Monitor whale activity, exchange flows and smart money reaction.";
-}
-
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
   const link = item.link || "";
-  const impact = "MEDIUM IMPACT";
 
-  return `📰 <b>${title}</b>`;
-🔥 ${impact}
+  return `📰 <b>${title}</b>
 
-<a href="${link}">Read full article</a>`;
+🔥 <b>MEDIUM IMPACT</b>
+🐋 WAI Intelligence detected increased market relevance.
+
+${link}`;
 }
-
 
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
@@ -160,7 +108,6 @@ bot.onText(/\/status/, (msg) => {
 Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
-
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}`
   );
 });
@@ -172,22 +119,15 @@ bot.onText(/\/testnews/, async (msg) => {
 
   await bot.sendMessage(
     TELEGRAM_CHANNEL_ID,
-    `📰 <b>WAI MARKET NEWS TEST</b>
+    `📰 <b>WAI News Bot Test</b>
 
-<b>Bot connection test completed successfully.</b>
+🔥 <b>MEDIUM IMPACT</b>
+🐋 WAI Intelligence detected increased market relevance.
 
-🐋 <b>WAI Intelligence:</b>
-The WAI News Bot is connected to the official WAI News channel.
-
-🔎 <b>Status:</b>
-• Telegram: Online ✅
-• Railway: Online ✅
-• News Feed: Active ✅
-
-#WAI #Crypto #WhaleSignals`,
+https://cointelegraph.com/`,
     {
       parse_mode: "HTML",
-      disable_web_page_preview: true
+      disable_web_page_preview: false
     }
   );
 
