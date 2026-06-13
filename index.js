@@ -101,11 +101,15 @@ function detectImpact(title = "") {
 
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
+  const link = item.link || "";
   const impact = "MEDIUM IMPACT";
 
   return `📰 <b>${title}</b>
 
-🔥 ${impact}`;
+🔥 ${impact}
+
+${link}`;
+
 }
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
