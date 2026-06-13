@@ -104,9 +104,9 @@ function formatPost(item) {
   const link = item.link || "";
   const impact = detectImpact(item.title);
 
- return `📰 <b>${title}</b>
+return `📰 <b>${title}</b>
 
-${impact}
+🔥 ${impact}`;
 
 🔗 ${link}
 
