@@ -47,6 +47,10 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
+function escapeAttr(text = "") {
+  return String(text).replace(/"/g, "&quot;");
+}
+
 function detectImpact(title = "") {
   const t = String(title).toLowerCase();
 
@@ -93,7 +97,7 @@ function detectImpact(title = "") {
 
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
-  const link = item.link || "";
+  const link = escapeAttr(item.link || "");
   const impact = detectImpact(item.title);
 
   return `📰 <b>${title}</b>
@@ -101,7 +105,7 @@ function formatPost(item) {
 ${impact}
 🐋 Whale activity worth monitoring.
 
-${link}`;
+<a href="${link}">Read full article</a>`;
 }
 
 async function checkNews() {
@@ -169,7 +173,7 @@ bot.onText(/\/testnews/, async (msg) => {
 🟠 <b>MEDIUM IMPACT</b>
 🐋 Whale activity worth monitoring.
 
-https://cointelegraph.com/`,
+<a href="https://cointelegraph.com/">Read full article</a>`,
     {
       parse_mode: "HTML",
       disable_web_page_preview: false
