@@ -47,14 +47,59 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
+function detectImpact(title = "") {
+  const t = String(title).toLowerCase();
+
+  if (
+    t.includes("breaking") ||
+    t.includes("hack") ||
+    t.includes("exploit") ||
+    t.includes("liquidation") ||
+    t.includes("sec approves") ||
+    t.includes("etf approved") ||
+    t.includes("crash") ||
+    t.includes("emergency")
+  ) {
+    return "🚨 <b>BREAKING NEWS</b>";
+  }
+
+  if (
+    t.includes("bullish") ||
+    t.includes("institutional") ||
+    t.includes("adoption") ||
+    t.includes("record") ||
+    t.includes("whale") ||
+    t.includes("etf") ||
+    t.includes("blackrock") ||
+    t.includes("binance") ||
+    t.includes("coinbase")
+  ) {
+    return "🔴 <b>HIGH IMPACT</b>";
+  }
+
+  if (
+    t.includes("futures") ||
+    t.includes("staking") ||
+    t.includes("market") ||
+    t.includes("price") ||
+    t.includes("trader") ||
+    t.includes("analyst")
+  ) {
+    return "🟠 <b>MEDIUM IMPACT</b>";
+  }
+
+  return "🟢 <b>LOW IMPACT</b>";
+}
+
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
   const link = item.link || "";
+  const impact = detectImpact(item.title);
 
   return `📰 <b>${title}</b>
 
-🔥 <b>MEDIUM IMPACT</b>
-🐋 WAI Intelligence detected increased market relevance.
+${impact}
+🐋 Whale activity worth monitoring.
 
 ${link}`;
 }
@@ -121,8 +166,8 @@ bot.onText(/\/testnews/, async (msg) => {
     TELEGRAM_CHANNEL_ID,
     `📰 <b>WAI News Bot Test</b>
 
-🔥 <b>MEDIUM IMPACT</b>
-🐋 WAI Intelligence detected increased market relevance.
+🟠 <b>MEDIUM IMPACT</b>
+🐋 Whale activity worth monitoring.
 
 https://cointelegraph.com/`,
     {
