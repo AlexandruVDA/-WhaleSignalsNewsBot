@@ -102,25 +102,9 @@ function detectImpact(title = "") {
 function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
   const link = item.link || "";
-  const tags = detectTags(item.title);
   const impact = detectImpact(item.title);
 
- return `📰 <b>WAI MARKET NEWS</b>
-
-<b>${title}</b>
-
-${impact}
-
-🔎 <b>What to watch:</b>
-• Whale transfers
-• Exchange inflows/outflows
-• BTC & ETH reaction
-• Smart money positioning
-
-🔗 <b>Source:</b>
-${link}
-
-return `📰 <b>WAI MARKET NEWS</b>
+  return `📰 <b>WAI MARKET NEWS</b>
 
 <b>${title}</b>
 
@@ -138,7 +122,7 @@ ${link}
 ━━━━━━━━━━━━━━
 🐋 Powered by WAI Intelligence
 🛰️ Smart Money Monitoring
-📰 #CryptoNews #WAI #SmartMoney ${tags}
+📰 #CryptoNews #WAI #SmartMoney
 `;
 }
 async function checkNews() {
