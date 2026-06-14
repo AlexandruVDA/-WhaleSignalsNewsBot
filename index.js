@@ -142,8 +142,8 @@ function getDescription(item) {
 
   let text = cleanText(raw);
 
-  if (text.length > 320) {
-    text = text.slice(0, 317).trim() + "...";
+  if (text.length > 210) {
+    text = text.slice(0, 207).trim() + "...";
   }
 
   return text;
@@ -165,20 +165,17 @@ function formatFallbackMessage(item) {
   const title = escapeHtml(cleanText(item.title));
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
-  const link = item.link || "";
 
   return `<b>${title}</b>
 
 ${description}
 
-<b>${impact}</b>
-
-${link}`;
+<b>${impact}</b>`;
 }
 
 async function postNews(item) {
-  const caption = formatCaption(item);
   const imageUrl = getImageUrl(item);
+  const caption = formatCaption(item);
 
   if (imageUrl) {
     try {
@@ -263,7 +260,7 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Image + article text + button ✅`
+Post style: Image + title + description + button ✅`
   );
 });
 
