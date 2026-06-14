@@ -5,16 +5,7 @@ const Parser = require("rss-parser");
 const fs = require("fs");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-
-const parser = new Parser({
-  customFields: {
-    item: [
-      ["media:content", "mediaContent"],
-      ["media:thumbnail", "mediaThumbnail"],
-      ["content:encoded", "contentEncoded"]
-    ]
-  }
-});
+const parser = new Parser();
 
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
@@ -54,6 +45,12 @@ function escapeHtml(text = "") {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function escapeAttr(text = "") {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;");
 }
 
 function detectImpact(title = "") {
@@ -100,119 +97,16 @@ function detectImpact(title = "") {
   return "🟢 LOW IMPACT";
 }
 
-function getImageUrl(item) {
-  if (item.enclosure && item.enclosure.url) return item.enclosure.url;
-
-  if (item.mediaContent) {
-    if (Array.isArray(item.mediaContent)) {
-      const found = item.mediaContent.find(x => x && x.$ && x.$.url);
-      if (found) return found.$.url;
-    }
-
-    if (item.mediaContent.$ && item.mediaContent.$.url) {
-      return item.mediaContent.$.url;
-    }
-  }
-
-  if (item.mediaThumbnail) {
-    if (Array.isArray(item.mediaThumbnail)) {
-      const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
-      if (found) return found.$.url;
-    }
-
-    if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
-      return item.mediaThumbnail.$.url;
-    }
-  }
-
-  const html = item.content || item.contentEncoded || item.summary || "";
-  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (match && match[1]) return match[1];
-
-  return "";
-}
-
-function getDescription(item) {
-  const raw =
-    item.contentSnippet ||
-    item.summary ||
-    item.content ||
-    item.contentEncoded ||
-    "";
-
-  let text = cleanText(raw);
-
-  if (text.length > 210) {
-    text = text.slice(0, 207).trim() + "...";
-  }
-
-  return text;
-}
-
-function formatCaption(item) {
+function formatPost(item) {
   const title = escapeHtml(cleanText(item.title));
-  const description = escapeHtml(getDescription(item));
+  const link = escapeAttr(item.link || "");
   const impact = escapeHtml(detectImpact(item.title));
 
-  return `<b>${title}</b>
+  return `<i>${impact}</i>
 
-${description}
+${title}
 
-<b>${impact}</b>`;
-}
-
-function formatFallbackMessage(item) {
-  const title = escapeHtml(cleanText(item.title));
-  const description = escapeHtml(getDescription(item));
-  const impact = escapeHtml(detectImpact(item.title));
-
-  return `<b>${title}</b>
-
-${description}
-
-<b>${impact}</b>`;
-}
-
-async function postNews(item) {
-  const imageUrl = getImageUrl(item);
-  const caption = formatCaption(item);
-
-  if (imageUrl) {
-    try {
-      await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
-        caption,
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "📖 Read Full Article",
-                url: item.link
-              }
-            ]
-          ]
-        }
-      });
-      return;
-    } catch (err) {
-      console.log("Image post failed, fallback to message:", err.message);
-    }
-  }
-
-  await bot.sendMessage(TELEGRAM_CHANNEL_ID, formatFallbackMessage(item), {
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "📖 Read Full Article",
-            url: item.link
-          }
-        ]
-      ]
-    }
-  });
+<a href="${link}">Read full article</a>`;
 }
 
 async function checkNews() {
@@ -232,7 +126,12 @@ async function checkNews() {
         const id = item.guid || item.link || item.title;
         if (!id || posted.includes(id)) continue;
 
-        await postNews(item);
+        const message = formatPost(item);
+
+        await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
+          parse_mode: "HTML",
+          disable_web_page_preview: false
+        });
 
         posted.push(id);
         savePosted(posted);
@@ -260,7 +159,7 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Image + title + description + button ✅`
+Post style: Premium text + article preview ✅`
   );
 });
 
@@ -269,26 +168,16 @@ bot.onText(/\/testnews/, async (msg) => {
     return bot.sendMessage(msg.chat.id, "❌ TELEGRAM_CHANNEL_ID missing");
   }
 
-  await bot.sendPhoto(
+  await bot.sendMessage(
     TELEGRAM_CHANNEL_ID,
-    "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg",
+    `<i>🟢 LOW IMPACT</i>
+
+Ethereum Can Quantum-Proof Accounts for $0.07: Ethereum Researcher
+
+<a href="https://cointelegraph.com/news/ethereum-quantum-proof-accounts-kohaku-nicolas-consigny">Read full article</a>`,
     {
-      caption: `<b>Ethereum Can Quantum-Proof Accounts for $0.07: Ethereum Researcher</b>
-
-Ethereum Foundation researcher Nicolas Consigny proposed an interim post-quantum signature system that could protect Ethereum accounts for about 7 cents without requiring a hard fork.
-
-<b>🟢 LOW IMPACT</b>`,
       parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "📖 Read Full Article",
-              url: "https://cointelegraph.com/"
-            }
-          ]
-        ]
-      }
+      disable_web_page_preview: false
     }
   );
 
