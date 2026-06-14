@@ -5,16 +5,7 @@ const Parser = require("rss-parser");
 const fs = require("fs");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-
-const parser = new Parser({
-  customFields: {
-    item: [
-      ["media:content", "mediaContent"],
-      ["media:thumbnail", "mediaThumbnail"],
-      ["content:encoded", "contentEncoded"]
-    ]
-  }
-});
+const parser = new Parser();
 
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
@@ -38,148 +29,6 @@ function savePosted(items) {
   fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-300), null, 2));
 }
 
-function cleanText(text = "") {
-  return String(text)
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function escapeHtml(text = "") {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeAttr(text = "") {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;");
-}
-
-function detectImpact(title = "") {
-  const t = String(title).toLowerCase();
-
-  if (
-    t.includes("breaking") ||
-    t.includes("hack") ||
-    t.includes("exploit") ||
-    t.includes("liquidation") ||
-    t.includes("sec approves") ||
-    t.includes("etf approved") ||
-    t.includes("crash") ||
-    t.includes("emergency")
-  ) {
-    return "🚨 <b>BREAKING NEWS</b>";
-  }
-
-  if (
-    t.includes("bullish") ||
-    t.includes("institutional") ||
-    t.includes("adoption") ||
-    t.includes("record") ||
-    t.includes("whale") ||
-    t.includes("etf") ||
-    t.includes("blackrock") ||
-    t.includes("binance") ||
-    t.includes("coinbase")
-  ) {
-    return "🔴 <b>HIGH IMPACT</b>";
-  }
-
-  if (
-    t.includes("futures") ||
-    t.includes("staking") ||
-    t.includes("market") ||
-    t.includes("price") ||
-    t.includes("trader") ||
-    t.includes("analyst")
-  ) {
-    return "🟠 <b>MEDIUM IMPACT</b>";
-  }
-
-  return "🟢 <b>LOW IMPACT</b>";
-}
-
-function getImageUrl(item) {
-  if (item.enclosure && item.enclosure.url) {
-    return item.enclosure.url;
-  }
-
-  if (item.mediaContent) {
-    if (Array.isArray(item.mediaContent)) {
-      const found = item.mediaContent.find(x => x && x.$ && x.$.url);
-      if (found) return found.$.url;
-    }
-
-    if (item.mediaContent.$ && item.mediaContent.$.url) {
-      return item.mediaContent.$.url;
-    }
-  }
-
-  if (item.mediaThumbnail) {
-    if (Array.isArray(item.mediaThumbnail)) {
-      const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
-      if (found) return found.$.url;
-    }
-
-    if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
-      return item.mediaThumbnail.$.url;
-    }
-  }
-
-  const html = item.content || item.contentEncoded || item.summary || "";
-  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (match && match[1]) return match[1];
-
-  return "";
-}
-
-function formatCaption(item) {
-  const link = escapeAttr(item.link || "");
-  const impact = detectImpact(item.title);
-
-  return `${impact}
-
-<a href="${link}">Read full article</a>`;
-}
-
-function formatFallbackMessage(item) {
-  const link = escapeAttr(item.link || "");
-  const impact = detectImpact(item.title);
-
-  return `${impact}
-
-<a href="${link}">Read full article</a>`;
-}
-
-async function postNews(item) {
-  const caption = formatCaption(item);
-  const imageUrl = getImageUrl(item);
-
-  if (imageUrl) {
-    try {
-      await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
-        caption,
-        parse_mode: "HTML"
-      });
-      return;
-    } catch (err) {
-      console.log("Image post failed, fallback to message:", err.message);
-    }
-  }
-
-  await bot.sendMessage(TELEGRAM_CHANNEL_ID, formatFallbackMessage(item), {
-    parse_mode: "HTML",
-    disable_web_page_preview: true
-  });
-}
-
 async function checkNews() {
   if (!TELEGRAM_CHANNEL_ID) {
     console.log("Missing TELEGRAM_CHANNEL_ID");
@@ -197,7 +46,9 @@ async function checkNews() {
         const id = item.guid || item.link || item.title;
         if (!id || posted.includes(id)) continue;
 
-        await postNews(item);
+        await bot.sendMessage(TELEGRAM_CHANNEL_ID, item.link, {
+          disable_web_page_preview: false
+        });
 
         posted.push(id);
         savePosted(posted);
@@ -225,7 +76,7 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Image + impact only ✅`
+Post style: Telegram article preview ✅`
   );
 });
 
@@ -234,15 +85,13 @@ bot.onText(/\/testnews/, async (msg) => {
     return bot.sendMessage(msg.chat.id, "❌ TELEGRAM_CHANNEL_ID missing");
   }
 
-  const testImage =
-    "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg";
-
-  await bot.sendPhoto(TELEGRAM_CHANNEL_ID, testImage, {
-    caption: `🟠 <b>MEDIUM IMPACT</b>
-
-<a href="https://cointelegraph.com/">Read full article</a>`,
-    parse_mode: "HTML"
-  });
+  await bot.sendMessage(
+    TELEGRAM_CHANNEL_ID,
+    "https://cointelegraph.com/news/ethereum-quantum-proof-accounts-kohaku-nicolas-consigny",
+    {
+      disable_web_page_preview: false
+    }
+  );
 
   bot.sendMessage(msg.chat.id, "✅ Test news sent");
 });
