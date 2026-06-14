@@ -81,7 +81,7 @@ function detectImpact(title = "") {
     t.includes("binance") ||
     t.includes("coinbase")
   ) {
-    return "🔴 Market Impact: High";
+    return "Market Impact: High";
   }
 
   if (
@@ -92,10 +92,10 @@ function detectImpact(title = "") {
     t.includes("trader") ||
     t.includes("analyst")
   ) {
-    return "🟠 Market Impact: Medium";
+    return "Market Impact: Medium";
   }
 
-  return "🟢 Market Impact: Low";
+  return "Market Impact: Low";
 }
 
 function getImageUrl(item) {
