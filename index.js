@@ -141,9 +141,9 @@ function shorten(text = "", max = 95) {
 function shortenTitle(text = "") {
   text = cleanText(text);
 
-  if (text.length <= 42) return text;
+  if (text.length <= 34) return text;
 
-  return text.slice(0, 39).trim() + "...";
+  return text.slice(0, 31).trim() + "...";
 }
 
 function getDescription(item) {
@@ -163,9 +163,7 @@ function formatCaption(item) {
   const impact = escapeHtml(detectImpact(item.title));
 
   return `<b>${title}</b>
-
 ${description}
-
 <b>${impact}</b>`;
 }
 
