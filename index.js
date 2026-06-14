@@ -66,7 +66,9 @@ function detectImpact(title = "") {
     t.includes("liquidation") ||
     t.includes("crash") ||
     t.includes("emergency")
-  ) return "🚨 BREAKING NEWS";
+  ) {
+    return "🚨 Market Impact: Breaking";
+  }
 
   if (
     t.includes("bullish") ||
@@ -78,7 +80,9 @@ function detectImpact(title = "") {
     t.includes("blackrock") ||
     t.includes("binance") ||
     t.includes("coinbase")
-  ) return "🔴 HIGH IMPACT";
+  ) {
+    return "🔴 Market Impact: High";
+  }
 
   if (
     t.includes("futures") ||
@@ -87,9 +91,11 @@ function detectImpact(title = "") {
     t.includes("price") ||
     t.includes("trader") ||
     t.includes("analyst")
-  ) return "🟠 MEDIUM IMPACT";
+  ) {
+    return "🟠 Market Impact: Medium";
+  }
 
-  return "🟢 LOW IMPACT";
+  return "🟢 Market Impact: Low";
 }
 
 function getImageUrl(item) {
