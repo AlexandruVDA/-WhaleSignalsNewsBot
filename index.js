@@ -5,7 +5,16 @@ const Parser = require("rss-parser");
 const fs = require("fs");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const parser = new Parser();
+
+const parser = new Parser({
+  customFields: {
+    item: [
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+      ["content:encoded", "contentEncoded"]
+    ]
+  }
+});
 
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
@@ -47,12 +56,6 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
-function escapeAttr(text = "") {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;");
-}
-
 function detectImpact(title = "") {
   const t = String(title).toLowerCase();
 
@@ -61,13 +64,9 @@ function detectImpact(title = "") {
     t.includes("hack") ||
     t.includes("exploit") ||
     t.includes("liquidation") ||
-    t.includes("sec approves") ||
-    t.includes("etf approved") ||
     t.includes("crash") ||
     t.includes("emergency")
-  ) {
-    return "🚨 BREAKING NEWS";
-  }
+  ) return "🚨 BREAKING NEWS";
 
   if (
     t.includes("bullish") ||
@@ -79,9 +78,7 @@ function detectImpact(title = "") {
     t.includes("blackrock") ||
     t.includes("binance") ||
     t.includes("coinbase")
-  ) {
-    return "🔴 HIGH IMPACT";
-  }
+  ) return "🔴 HIGH IMPACT";
 
   if (
     t.includes("futures") ||
@@ -90,23 +87,103 @@ function detectImpact(title = "") {
     t.includes("price") ||
     t.includes("trader") ||
     t.includes("analyst")
-  ) {
-    return "🟠 MEDIUM IMPACT";
-  }
+  ) return "🟠 MEDIUM IMPACT";
 
   return "🟢 LOW IMPACT";
 }
 
-function formatPost(item) {
-  const title = escapeHtml(cleanText(item.title));
-  const link = escapeAttr(item.link || "");
+function getImageUrl(item) {
+  if (item.enclosure && item.enclosure.url) return item.enclosure.url;
+
+  if (item.mediaContent) {
+    if (Array.isArray(item.mediaContent)) {
+      const found = item.mediaContent.find(x => x && x.$ && x.$.url);
+      if (found) return found.$.url;
+    }
+    if (item.mediaContent.$ && item.mediaContent.$.url) {
+      return item.mediaContent.$.url;
+    }
+  }
+
+  if (item.mediaThumbnail) {
+    if (Array.isArray(item.mediaThumbnail)) {
+      const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
+      if (found) return found.$.url;
+    }
+    if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
+      return item.mediaThumbnail.$.url;
+    }
+  }
+
+  const html = item.content || item.contentEncoded || item.summary || "";
+  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (match && match[1]) return match[1];
+
+  return "";
+}
+
+function shorten(text = "", max = 95) {
+  text = cleanText(text);
+  if (text.length <= max) return text;
+  return text.slice(0, max).trim() + "...";
+}
+
+function getDescription(item) {
+  const raw =
+    item.contentSnippet ||
+    item.summary ||
+    item.content ||
+    item.contentEncoded ||
+    "";
+
+  return shorten(raw, 230);
+}
+
+function formatCaption(item) {
+  const title = escapeHtml(shorten(item.title, 95));
+  const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
-  return `<i>${impact}</i>
+  return `<b>${title}</b>
+${description}
+<b>${impact}</b>`;
+}
 
-${title}
+async function postNews(item) {
+  const imageUrl = getImageUrl(item);
+  const caption = formatCaption(item);
 
-<a href="${link}">Read full article</a>`;
+  if (imageUrl) {
+    await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
+      caption,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "📖 Read Full Article",
+              url: item.link
+            }
+          ]
+        ]
+      }
+    });
+  } else {
+    await bot.sendMessage(TELEGRAM_CHANNEL_ID, caption, {
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "📖 Read Full Article",
+              url: item.link
+            }
+          ]
+        ]
+      }
+    });
+  }
 }
 
 async function checkNews() {
@@ -126,12 +203,7 @@ async function checkNews() {
         const id = item.guid || item.link || item.title;
         if (!id || posted.includes(id)) continue;
 
-        const message = formatPost(item);
-
-        await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
-          parse_mode: "HTML",
-          disable_web_page_preview: false
-        });
+        await postNews(item);
 
         posted.push(id);
         savePosted(posted);
@@ -145,11 +217,6 @@ async function checkNews() {
   }
 }
 
-bot.on("channel_post", (msg) => {
-  console.log("CHANNEL ID:", msg.chat.id);
-  console.log("TITLE:", msg.chat.title);
-});
-
 bot.onText(/\/status/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
@@ -159,7 +226,7 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Premium text + article preview ✅`
+Post style: Premium compact card ✅`
   );
 });
 
@@ -168,16 +235,24 @@ bot.onText(/\/testnews/, async (msg) => {
     return bot.sendMessage(msg.chat.id, "❌ TELEGRAM_CHANNEL_ID missing");
   }
 
-  await bot.sendMessage(
+  await bot.sendPhoto(
     TELEGRAM_CHANNEL_ID,
-    `<i>🟢 LOW IMPACT</i>
-
-Ethereum Can Quantum-Proof Accounts for $0.07: Ethereum Researcher
-
-<a href="https://cointelegraph.com/news/ethereum-quantum-proof-accounts-kohaku-nicolas-consigny">Read full article</a>`,
+    "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg",
     {
+      caption: `<b>StanChart looks for 3 signs of BTC bottom, including Strategy's Monday news...</b>
+Standard Chartered’s Geoff Kendrick tells clients “winter is over” as the analyst said crypto prices have likely seen the low for the cycle...
+<b>🟢 LOW IMPACT</b>`,
       parse_mode: "HTML",
-      disable_web_page_preview: false
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "📖 Read Full Article",
+              url: "https://cointelegraph.com/"
+            }
+          ]
+        ]
+      }
     }
   );
 
