@@ -167,7 +167,7 @@ function formatCaption(item) {
 ${description}
 
 <b>${impact}</b>`;
-
+}
 
 async function postNews(item) {
   const imageUrl = getImageUrl(item);
