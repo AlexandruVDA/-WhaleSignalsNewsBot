@@ -141,7 +141,7 @@ function shorten(text = "", max = 95) {
 function shortenTitle(text = "") {
   text = cleanText(text);
 
-  if (text.length <= 39) return text;
+  if (text.length <= 40) return text;
 
   return text.slice(0, 33).trim() + "...";
 }
