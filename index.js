@@ -143,7 +143,7 @@ function shortenTitle(text = "") {
 
   if (text.length <= 41) return text;
 
-  return text.slice(0, 36).trim() + "..";
+  return text.slice(0, 34).trim() + "..";
 }
 
 function getDescription(item) {
