@@ -141,9 +141,9 @@ function shorten(text = "", max = 95) {
 function shortenTitle(text = "") {
   text = cleanText(text);
 
-  if (text.length <= 37) return text;
+  if (text.length <= 39) return text;
 
-  return text.slice(0, 32).trim() + "...";
+  return text.slice(0, 33).trim() + "...";
 }
 
 function getDescription(item) {
