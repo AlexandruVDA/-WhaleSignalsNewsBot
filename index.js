@@ -5,7 +5,16 @@ const Parser = require("rss-parser");
 const fs = require("fs");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const parser = new Parser();
+
+const parser = new Parser({
+  customFields: {
+    item: [
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+      ["content:encoded", "contentEncoded"]
+    ]
+  }
+});
 
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
@@ -48,7 +57,9 @@ function escapeHtml(text = "") {
 }
 
 function escapeAttr(text = "") {
-  return String(text).replace(/"/g, "&quot;");
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;");
 }
 
 function detectImpact(title = "") {
@@ -95,7 +106,41 @@ function detectImpact(title = "") {
   return "🟢 <b>LOW IMPACT</b>";
 }
 
-function formatPost(item) {
+function getImageUrl(item) {
+  if (item.enclosure && item.enclosure.url) {
+    return item.enclosure.url;
+  }
+
+  if (item.mediaContent) {
+    if (Array.isArray(item.mediaContent)) {
+      const found = item.mediaContent.find(x => x && x.$ && x.$.url);
+      if (found) return found.$.url;
+    }
+
+    if (item.mediaContent.$ && item.mediaContent.$.url) {
+      return item.mediaContent.$.url;
+    }
+  }
+
+  if (item.mediaThumbnail) {
+    if (Array.isArray(item.mediaThumbnail)) {
+      const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
+      if (found) return found.$.url;
+    }
+
+    if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
+      return item.mediaThumbnail.$.url;
+    }
+  }
+
+  const html = item.content || item.contentEncoded || item.summary || "";
+  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (match && match[1]) return match[1];
+
+  return "";
+}
+
+function formatCaption(item) {
   const title = escapeHtml(cleanText(item.title));
   const link = escapeAttr(item.link || "");
   const impact = detectImpact(item.title);
@@ -105,7 +150,48 @@ function formatPost(item) {
 ${impact}
 🐋 Whale activity worth monitoring.
 
-<a href="${link}">Read full article</a>`;
+<a href="${link}">Read full article</a>
+
+Powered by WAI Intelligence
+#CryptoNews #WAI #SmartMoney`;
+}
+
+function formatFallbackMessage(item) {
+  const title = escapeHtml(cleanText(item.title));
+  const link = escapeAttr(item.link || "");
+  const impact = detectImpact(item.title);
+
+  return `📰 <b>${title}</b>
+
+${impact}
+🐋 Whale activity worth monitoring.
+
+<a href="${link}">Read full article</a>
+
+Powered by WAI Intelligence
+#CryptoNews #WAI #SmartMoney`;
+}
+
+async function postNews(item) {
+  const caption = formatCaption(item);
+  const imageUrl = getImageUrl(item);
+
+  if (imageUrl) {
+    try {
+      await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
+        caption,
+        parse_mode: "HTML"
+      });
+      return;
+    } catch (err) {
+      console.log("Image post failed, fallback to message:", err.message);
+    }
+  }
+
+  await bot.sendMessage(TELEGRAM_CHANNEL_ID, formatFallbackMessage(item), {
+    parse_mode: "HTML",
+    disable_web_page_preview: false
+  });
 }
 
 async function checkNews() {
@@ -125,12 +211,7 @@ async function checkNews() {
         const id = item.guid || item.link || item.title;
         if (!id || posted.includes(id)) continue;
 
-        const message = formatPost(item);
-
-        await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
-          parse_mode: "HTML",
-          disable_web_page_preview: false
-        });
+        await postNews(item);
 
         posted.push(id);
         savePosted(posted);
@@ -157,7 +238,8 @@ bot.onText(/\/status/, (msg) => {
 Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
-Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}`
+Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
+Post style: Photo + Caption ✅`
   );
 });
 
@@ -166,21 +248,23 @@ bot.onText(/\/testnews/, async (msg) => {
     return bot.sendMessage(msg.chat.id, "❌ TELEGRAM_CHANNEL_ID missing");
   }
 
-  await bot.sendMessage(
-    TELEGRAM_CHANNEL_ID,
-    `📰 <b>WAI News Bot Test</b>
+  const testImage =
+    "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg";
+
+  await bot.sendPhoto(TELEGRAM_CHANNEL_ID, testImage, {
+    caption: `📰 <b>WAI News Bot Test</b>
 
 🟠 <b>MEDIUM IMPACT</b>
 🐋 Whale activity worth monitoring.
 
-<a href="https://cointelegraph.com/">Read full article</a>`,
-    {
-      parse_mode: "HTML",
-      disable_web_page_preview: false
-    }
-  );
+<a href="https://cointelegraph.com/">Read full article</a>
 
-  bot.sendMessage(msg.chat.id, "✅ Test news sent");
+Powered by WAI Intelligence
+#CryptoNews #WAI #SmartMoney`,
+    parse_mode: "HTML"
+  });
+
+  bot.sendMessage(msg.chat.id, "✅ Test news sent as photo + caption");
 });
 
 console.log("WAI News Bot started");
