@@ -141,9 +141,9 @@ function shorten(text = "", max = 95) {
 function shortenTitle(text = "") {
   text = cleanText(text);
 
-  if (text.length <= 50) return text;
+  if (text.length <= 42) return text;
 
-  return text.slice(0, 47).trim() + "...";
+  return text.slice(0, 39).trim() + "...";
 }
 
 function getDescription(item) {
@@ -162,10 +162,14 @@ function formatCaption(item) {
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
-  return `<b>${title}</b>
+
+return `<b>${title}</b>
+
 ${description}
+
 <b>${impact}</b>`;
-}
+
+<b>${impact}</b>`;
 
 async function postNews(item) {
   const imageUrl = getImageUrl(item);
