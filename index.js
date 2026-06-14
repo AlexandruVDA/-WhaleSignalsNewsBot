@@ -106,6 +106,7 @@ function getImageUrl(item) {
       const found = item.mediaContent.find(x => x && x.$ && x.$.url);
       if (found) return found.$.url;
     }
+
     if (item.mediaContent.$ && item.mediaContent.$.url) {
       return item.mediaContent.$.url;
     }
@@ -116,6 +117,7 @@ function getImageUrl(item) {
       const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
       if (found) return found.$.url;
     }
+
     if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
       return item.mediaThumbnail.$.url;
     }
@@ -130,8 +132,18 @@ function getImageUrl(item) {
 
 function shorten(text = "", max = 95) {
   text = cleanText(text);
+
   if (text.length <= max) return text;
+
   return text.slice(0, max).trim() + "...";
+}
+
+function shortenTitle(text = "") {
+  text = cleanText(text);
+
+  if (text.length <= 65) return text;
+
+  return text.slice(0, 62).trim() + "...";
 }
 
 function getDescription(item) {
@@ -146,7 +158,7 @@ function getDescription(item) {
 }
 
 function formatCaption(item) {
-  const title = escapeHtml(shorten(item.title, 95));
+  const title = escapeHtml(shortenTitle(item.title));
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
@@ -245,9 +257,9 @@ bot.onText(/\/testnews/, async (msg) => {
     TELEGRAM_CHANNEL_ID,
     "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg",
     {
-      caption: `<b>StanChart looks for 3 signs of BTC bottom, including Strategy's Monday news...</b>
+      caption: `<b>StanChart looks for 3 signs of BTC bottom, including...</b>
 Standard Chartered’s Geoff Kendrick tells clients “winter is over” as the analyst said crypto prices have likely seen the low for the cycle...
-<b>🟢 LOW IMPACT</b>`,
+<b>Market Impact: Low</b>`,
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
