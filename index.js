@@ -162,14 +162,12 @@ function formatCaption(item) {
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
-
-return `<b>${title}</b>
+  return `<b>${title}</b>
 
 ${description}
 
 <b>${impact}</b>`;
 
-<b>${impact}</b>`;
 
 async function postNews(item) {
   const imageUrl = getImageUrl(item);
