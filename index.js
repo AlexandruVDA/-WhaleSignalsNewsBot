@@ -141,35 +141,21 @@ function getImageUrl(item) {
 }
 
 function formatCaption(item) {
-  const title = escapeHtml(cleanText(item.title));
   const link = escapeAttr(item.link || "");
   const impact = detectImpact(item.title);
 
-  return `📰 <b>${title}</b>
+  return `${impact}
 
-${impact}
-🐋 Whale activity worth monitoring.
-
-<a href="${link}">Read full article</a>
-
-Powered by WAI Intelligence
-#CryptoNews #WAI #SmartMoney`;
+<a href="${link}">Read full article</a>`;
 }
 
 function formatFallbackMessage(item) {
-  const title = escapeHtml(cleanText(item.title));
   const link = escapeAttr(item.link || "");
   const impact = detectImpact(item.title);
 
-  return `📰 <b>${title}</b>
+  return `${impact}
 
-${impact}
-🐋 Whale activity worth monitoring.
-
-<a href="${link}">Read full article</a>
-
-Powered by WAI Intelligence
-#CryptoNews #WAI #SmartMoney`;
+<a href="${link}">Read full article</a>`;
 }
 
 async function postNews(item) {
@@ -190,7 +176,7 @@ async function postNews(item) {
 
   await bot.sendMessage(TELEGRAM_CHANNEL_ID, formatFallbackMessage(item), {
     parse_mode: "HTML",
-    disable_web_page_preview: false
+    disable_web_page_preview: true
   });
 }
 
@@ -239,7 +225,7 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Photo + Caption ✅`
+Post style: Image + impact only ✅`
   );
 });
 
@@ -252,19 +238,13 @@ bot.onText(/\/testnews/, async (msg) => {
     "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg";
 
   await bot.sendPhoto(TELEGRAM_CHANNEL_ID, testImage, {
-    caption: `📰 <b>WAI News Bot Test</b>
+    caption: `🟠 <b>MEDIUM IMPACT</b>
 
-🟠 <b>MEDIUM IMPACT</b>
-🐋 Whale activity worth monitoring.
-
-<a href="https://cointelegraph.com/">Read full article</a>
-
-Powered by WAI Intelligence
-#CryptoNews #WAI #SmartMoney`,
+<a href="https://cointelegraph.com/">Read full article</a>`,
     parse_mode: "HTML"
   });
 
-  bot.sendMessage(msg.chat.id, "✅ Test news sent as photo + caption");
+  bot.sendMessage(msg.chat.id, "✅ Test news sent");
 });
 
 console.log("WAI News Bot started");
