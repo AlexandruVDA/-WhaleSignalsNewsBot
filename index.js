@@ -23,15 +23,15 @@ const POSTED_FILE = "posted.json";
 const FEEDS = [
   "https://cointelegraph.com/rss",
   "https://decrypt.co/feed",
-"https://www.theblock.co/rss.xml",
-"https://bitcoinist.com/feed",
-"https://cryptoslate.com/feed",
-"https://u.today/rss",
-"https://www.newsbtc.com/feed",
-"https://beincrypto.com/feed",
-"https://www.cryptopolitan.com/feed",
-"https://zycrypto.com/feed",
-"https://ambcrypto.com/feed"
+  "https://www.theblock.co/rss.xml",
+  "https://bitcoinist.com/feed",
+  "https://cryptoslate.com/feed",
+  "https://u.today/rss",
+  "https://www.newsbtc.com/feed",
+  "https://beincrypto.com/feed",
+  "https://www.cryptopolitan.com/feed",
+  "https://zycrypto.com/feed",
+  "https://ambcrypto.com/feed",
   "https://www.coindesk.com/arc/outboundfeeds/rss/"
 ];
 
