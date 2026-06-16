@@ -165,7 +165,7 @@ function isTooOld(item) {
   if (Number.isNaN(date.getTime())) return false;
 
   const ageHours = (Date.now() - date.getTime()) / 3600000;
-  return ageHours > 24;
+  return ageHours > 6;
 }
 
 function isWeakNews(item) {
