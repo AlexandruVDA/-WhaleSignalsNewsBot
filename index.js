@@ -162,8 +162,7 @@ function formatCaption(item) {
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
-  return `<b>${title}</b>
-${description}
+  return `${description}
 <b>${impact}</b>`;
 }
 
