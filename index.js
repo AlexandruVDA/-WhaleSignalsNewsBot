@@ -45,7 +45,7 @@ function loadPosted() {
 }
 
 function savePosted(items) {
-  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-300), null, 2));
+  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-600), null, 2));
 }
 
 function cleanText(text = "") {
@@ -66,6 +66,10 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
+function normalizeTitle(title = "") {
+  return cleanText(title).toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function detectImpact(title = "") {
   const t = String(title).toLowerCase();
 
@@ -76,9 +80,7 @@ function detectImpact(title = "") {
     t.includes("liquidation") ||
     t.includes("crash") ||
     t.includes("emergency")
-  ) {
-    return "🚨 Market Impact: Breaking";
-  }
+  ) return "🚨 Market Impact: Breaking";
 
   if (
     t.includes("bullish") ||
@@ -90,9 +92,7 @@ function detectImpact(title = "") {
     t.includes("blackrock") ||
     t.includes("binance") ||
     t.includes("coinbase")
-  ) {
-    return "Market Impact: High";
-  }
+  ) return "Market Impact: High";
 
   if (
     t.includes("futures") ||
@@ -101,59 +101,41 @@ function detectImpact(title = "") {
     t.includes("price") ||
     t.includes("trader") ||
     t.includes("analyst")
-  ) {
-    return "Market Impact: Medium";
-  }
+  ) return "Market Impact: Medium";
 
   return "Market Impact: Low";
 }
 
 function getImageUrl(item) {
-  if (item.enclosure && item.enclosure.url) return item.enclosure.url;
+  if (item.enclosure?.url) return item.enclosure.url;
 
   if (item.mediaContent) {
     if (Array.isArray(item.mediaContent)) {
-      const found = item.mediaContent.find(x => x && x.$ && x.$.url);
+      const found = item.mediaContent.find(x => x?.$?.url);
       if (found) return found.$.url;
     }
-
-    if (item.mediaContent.$ && item.mediaContent.$.url) {
-      return item.mediaContent.$.url;
-    }
+    if (item.mediaContent.$?.url) return item.mediaContent.$.url;
   }
 
   if (item.mediaThumbnail) {
     if (Array.isArray(item.mediaThumbnail)) {
-      const found = item.mediaThumbnail.find(x => x && x.$ && x.$.url);
+      const found = item.mediaThumbnail.find(x => x?.$?.url);
       if (found) return found.$.url;
     }
-
-    if (item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
-      return item.mediaThumbnail.$.url;
-    }
+    if (item.mediaThumbnail.$?.url) return item.mediaThumbnail.$.url;
   }
 
   const html = item.content || item.contentEncoded || item.summary || "";
   const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (match && match[1]) return match[1];
+  if (match?.[1]) return match[1];
 
   return "";
 }
 
-function shorten(text = "", max = 95) {
+function shorten(text = "", max = 230) {
   text = cleanText(text);
-
   if (text.length <= max) return text;
-
   return text.slice(0, max).trim() + "...";
-}
-
-function shortenTitle(text = "") {
-  text = cleanText(text);
-
-  if (text.length <= 37) return text;
-
-  return text.slice(0, 32).trim() + "...";
 }
 
 function getDescription(item) {
@@ -168,7 +150,6 @@ function getDescription(item) {
 }
 
 function formatCaption(item) {
-  const title = escapeHtml(shortenTitle(item.title));
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item.title));
 
@@ -176,41 +157,47 @@ function formatCaption(item) {
 <b>${impact}</b>`;
 }
 
+function isTooOld(item) {
+  const dateRaw = item.isoDate || item.pubDate;
+  if (!dateRaw) return false;
+
+  const date = new Date(dateRaw);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const ageHours = (Date.now() - date.getTime()) / 3600000;
+  return ageHours > 24;
+}
+
+function isWeakNews(item) {
+  const title = String(item.title || "").toLowerCase();
+
+  return (
+    title.includes("podcast") ||
+    title.includes("newsletter") ||
+    title.includes("video:") ||
+    title.includes("sponsored") ||
+    title.includes("press release")
+  );
+}
+
 async function postNews(item) {
   const imageUrl = getImageUrl(item);
   const caption = formatCaption(item);
 
-  if (imageUrl) {
-    await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
-      caption,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "📖 Read Full Article",
-              url: item.link
-            }
-          ]
+  await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
+    caption,
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "📖 Read Full Article",
+            url: item.link
+          }
         ]
-      }
-    });
-  } else {
-    await bot.sendMessage(TELEGRAM_CHANNEL_ID, caption, {
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "📖 Read Full Article",
-              url: item.link
-            }
-          ]
-        ]
-      }
-    });
-  }
+      ]
+    }
+  });
 }
 
 async function checkNews() {
@@ -225,15 +212,36 @@ async function checkNews() {
     try {
       const feed = await parser.parseURL(feedUrl);
       console.log("RSS FEED:", feedUrl, "ITEMS:", feed.items.length);
+
       const items = feed.items.slice(0, 2);
 
       for (const item of items) {
+        const imageUrl = getImageUrl(item);
         const id = item.guid || item.link || item.title;
-        if (!id || posted.includes(id)) continue;
+        const titleKey = "title:" + normalizeTitle(item.title);
+
+        if (!id) continue;
+        if (posted.includes(id) || posted.includes(titleKey)) continue;
+
+        if (!imageUrl) {
+          console.log("Skipped - no preview image:", item.title);
+          continue;
+        }
+
+        if (isTooOld(item)) {
+          console.log("Skipped - older than 24h:", item.title);
+          continue;
+        }
+
+        if (isWeakNews(item)) {
+          console.log("Skipped - weak news:", item.title);
+          continue;
+        }
 
         await postNews(item);
 
         posted.push(id);
+        posted.push(titleKey);
         savePosted(posted);
 
         console.log("Posted:", item.title);
@@ -253,7 +261,12 @@ Status: ON ✅
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
-Post style: Premium compact card ✅`
+Post style: Premium compact card ✅
+Filters:
+- No duplicate titles ✅
+- No articles without preview image ✅
+- Max age: 24h ✅
+- 2 articles per feed ✅`
   );
 });
 
@@ -266,8 +279,8 @@ bot.onText(/\/testnews/, async (msg) => {
     TELEGRAM_CHANNEL_ID,
     "https://images.cointelegraph.com/images/1480_aHR0cHM6Ly9zMy5jb2ludGVsZWdyYXBoLmNvbS91cGxvYWRzLzIwMjQtMDIvMTQ4MGYyMzgtY2QyYi00NzVjLTk2YzctNzYyYTU5ZmM3YjI0LmpwZw==.jpg",
     {
-      caption: `<b>StanChart looks for 3 signs of BTC bottom, including...</b>
-Standard Chartered’s Geoff Kendrick tells clients “winter is over” as the analyst said crypto prices have likely seen the low for the cycle...
+      caption: `Standard Chartered’s Geoff Kendrick tells clients “winter is over” as crypto prices may have found a cycle low.
+
 <b>Market Impact: Low</b>`,
       parse_mode: "HTML",
       reply_markup: {
