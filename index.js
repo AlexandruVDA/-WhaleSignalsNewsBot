@@ -237,7 +237,6 @@ async function checkNews() {
         savePosted(posted);
 
         console.log("Posted:", item.title);
-        return;
       }
     } catch (err) {
       console.log("Feed error:", feedUrl, err.message);
