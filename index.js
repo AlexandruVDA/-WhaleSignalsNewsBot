@@ -224,7 +224,8 @@ async function checkNews() {
   for (const feedUrl of FEEDS) {
     try {
       const feed = await parser.parseURL(feedUrl);
-      const items = feed.items.slice(0, 5);
+      console.log("RSS FEED:", feedUrl, "ITEMS:", feed.items.length);
+      const items = feed.items.slice(0, 2);
 
       for (const item of items) {
         const id = item.guid || item.link || item.title;
