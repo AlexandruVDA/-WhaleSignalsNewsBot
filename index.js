@@ -5,7 +5,17 @@ const Parser = require("rss-parser");
 const fs = require("fs");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-const parser = new Parser();
+
+const parser = new Parser({
+  customFields: {
+    item: [
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+      ["content:encoded", "contentEncoded"],
+      ["enclosure", "enclosure"]
+    ]
+  }
+});
 
 const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
@@ -38,15 +48,24 @@ function savePosted(posted) {
 }
 
 function cleanText(text = "") {
-  return text
+  return String(text)
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&#8217;/g, "'")
     .replace(/&#8220;/g, '"')
     .replace(/&#8221;/g, '"')
+    .replace(/&#8211;/g, "-")
+    .replace(/&#8212;/g, "-")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function escapeHtml(text = "") {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function shortText(text, max = 220) {
@@ -98,6 +117,94 @@ function isRecent(item) {
   return now - published <= sixHours;
 }
 
+function getImageUrl(item) {
+  if (item.enclosure && item.enclosure.url) return item.enclosure.url;
+
+  if (item.mediaContent) {
+    if (Array.isArray(item.mediaContent) && item.mediaContent[0]?.$?.url) {
+      return item.mediaContent[0].$.url;
+    }
+
+    if (item.mediaContent.$?.url) {
+      return item.mediaContent.$.url;
+    }
+
+    if (item.mediaContent.url) {
+      return item.mediaContent.url;
+    }
+  }
+
+  if (item.mediaThumbnail) {
+    if (Array.isArray(item.mediaThumbnail) && item.mediaThumbnail[0]?.$?.url) {
+      return item.mediaThumbnail[0].$.url;
+    }
+
+    if (item.mediaThumbnail.$?.url) {
+      return item.mediaThumbnail.$.url;
+    }
+
+    if (item.mediaThumbnail.url) {
+      return item.mediaThumbnail.url;
+    }
+  }
+
+  const html = item.contentEncoded || item.content || "";
+  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (imgMatch && imgMatch[1]) return imgMatch[1];
+
+  return null;
+}
+
+async function postArticle(item, posted) {
+  const link = item.link;
+  const title = cleanText(item.title || "Crypto News");
+  const description = shortText(
+    item.contentSnippet || item.summary || item.content || item.contentEncoded || "",
+    230
+  );
+
+  const impact = getImpact(title, description);
+  const imageUrl = getImageUrl(item);
+
+  const caption =
+`📰 <b>${escapeHtml(title)}</b>
+
+${escapeHtml(description)}
+
+<b>Market Impact:</b> ${escapeHtml(impact)}`;
+
+  const options = {
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "📖 Read Full Article",
+            url: link
+          }
+        ]
+      ]
+    }
+  };
+
+  if (imageUrl) {
+    await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
+      caption,
+      ...options
+    });
+  } else {
+    await bot.sendMessage(TELEGRAM_CHANNEL_ID, caption, {
+      disable_web_page_preview: true,
+      ...options
+    });
+  }
+
+  posted.unshift(link);
+  savePosted(posted);
+
+  console.log(`Posted: ${title}`);
+}
+
 async function fetchNews() {
   const posted = loadPosted();
 
@@ -107,43 +214,12 @@ async function fetchNews() {
 
       for (const item of data.items || []) {
         const link = item.link;
-        if (!link || posted.includes(link)) continue;
+
+        if (!link) continue;
+        if (posted.includes(link)) continue;
         if (!isRecent(item)) continue;
 
-        const title = cleanText(item.title || "Crypto News");
-        const description = shortText(
-          item.contentSnippet || item.summary || item.content || "",
-          240
-        );
-
-        const impact = getImpact(title, description);
-
-        const message =
-`📰 ${title}
-
-${description}
-
-Market Impact: ${impact}`;
-
-        await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
-          parse_mode: "HTML",
-          disable_web_page_preview: false,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "📖 Read Full Article",
-                  url: link
-                }
-              ]
-            ]
-          }
-        });
-
-        posted.unshift(link);
-        savePosted(posted);
-
-        console.log(`Posted: ${title}`);
+        await postArticle(item, posted);
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
     } catch (err) {
