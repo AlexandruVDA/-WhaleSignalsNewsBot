@@ -238,6 +238,7 @@ function coverImage(ctx, img, x, y, w, h) {
   const nh = img.height * scale;
   const nx = x + (w - nw) / 2;
   const ny = y + (h - nh) / 2;
+
   ctx.drawImage(img, nx, ny, nw, nh);
 }
 
@@ -252,63 +253,39 @@ async function createPremiumCard(item) {
   const impact = detectImpact(item);
   const imageUrl = getImageUrl(item);
 
-  const bg = ctx.createLinearGradient(0, 0, width, height);
-  bg.addColorStop(0, "#050816");
-  bg.addColorStop(0.5, "#071426");
-  bg.addColorStop(1, "#02040a");
-  ctx.fillStyle = bg;
+  ctx.fillStyle = "#050814";
   ctx.fillRect(0, 0, width, height);
 
   try {
     const img = await loadImage(imageUrl);
-    coverImage(ctx, img, 0, 0, width, 610);
-
-    const overlay = ctx.createLinearGradient(0, 260, 0, 650);
-    overlay.addColorStop(0, "rgba(0,0,0,0.05)");
-    overlay.addColorStop(1, "rgba(2,4,10,0.96)");
-    ctx.fillStyle = overlay;
-    ctx.fillRect(0, 260, width, 390);
+    coverImage(ctx, img, 0, 0, width, 650);
   } catch (err) {
     console.log("Image load failed:", err.message);
   }
 
-  ctx.fillStyle = "rgba(2,4,10,0.92)";
-  ctx.fillRect(0, 610, width, 470);
+  const fade = ctx.createLinearGradient(0, 520, 0, 700);
+  fade.addColorStop(0, "rgba(5,8,20,0)");
+  fade.addColorStop(1, "rgba(5,8,20,1)");
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 520, width, 180);
 
-  ctx.strokeStyle = "rgba(110, 160, 255, 0.35)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(34, 34, width - 68, height - 68);
+  ctx.fillStyle = "#050814";
+  ctx.fillRect(0, 650, width, 430);
 
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.fillRect(60, 60, 210, 54);
-
+  ctx.font = "bold 52px Arial";
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 24px Arial";
-  ctx.fillText("WAI NEWS", 88, 96);
+  wrapText(ctx, title, 70, 720, 940, 62, 2);
 
-  ctx.fillStyle = impactColor(impact);
-  ctx.fillRect(780, 60, 230, 54);
-
-  ctx.fillStyle = impact === "Medium" ? "#000000" : "#ffffff";
-  ctx.font = "bold 23px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText(impact.toUpperCase(), 895, 96);
-  ctx.textAlign = "left";
-
-  ctx.font = "bold 54px Arial";
-  ctx.fillStyle = "#ffffff";
-  wrapText(ctx, title, 70, 680, 940, 64, 3);
-
-  ctx.font = "31px Arial";
-  ctx.fillStyle = "#d8e4ff";
-  wrapText(ctx, description, 70, 885, 940, 43, 3);
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "#d9e1ff";
+  wrapText(ctx, description, 70, 855, 940, 42, 3);
 
   ctx.fillStyle = "#8fb7ff";
-  ctx.font = "24px Arial";
+  ctx.font = "23px Arial";
   ctx.fillText("Powered by WAI Intelligence", 70, 1010);
 
   ctx.fillStyle = impactColor(impact);
-  ctx.font = "bold 24px Arial";
+  ctx.font = "bold 23px Arial";
   ctx.textAlign = "right";
   ctx.fillText(`MARKET IMPACT: ${impact.toUpperCase()}`, 1010, 1010);
   ctx.textAlign = "left";
@@ -317,8 +294,7 @@ async function createPremiumCard(item) {
 }
 
 function formatCaption(item) {
-  const description = escapeHtml(getDescription(item));
-  return `${description}`;
+  return escapeHtml(getDescription(item));
 }
 
 async function postNews(item) {
@@ -416,7 +392,7 @@ Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-Post style: Premium WAI card ✅
+Post style: Article image card ✅
 Filters:
 - Breaking / High / Medium only ✅
 - Low impact skipped ✅
