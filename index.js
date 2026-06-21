@@ -3,21 +3,21 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const Parser = require("rss-parser");
 const fs = require("fs");
+const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
 const parser = new Parser({
   customFields: {
     item: [
       ["media:content", "mediaContent"],
       ["media:thumbnail", "mediaThumbnail"],
-      ["content:encoded", "contentEncoded"],
-      ["enclosure", "enclosure"]
+      ["content:encoded", "contentEncoded"]
     ]
   }
 });
 
-const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
+const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
 const POSTED_FILE = "posted.json";
 
@@ -31,20 +31,22 @@ const FEEDS = [
   "https://www.newsbtc.com/feed",
   "https://beincrypto.com/feed",
   "https://www.cryptopolitan.com/feed",
-  "https://zycrypto.com/feed"
+  "https://zycrypto.com/feed",
+  "https://ambcrypto.com/feed",
+  "https://www.coindesk.com/arc/outboundfeeds/rss/"
 ];
 
 function loadPosted() {
-  if (!fs.existsSync(POSTED_FILE)) return [];
   try {
+    if (!fs.existsSync(POSTED_FILE)) return [];
     return JSON.parse(fs.readFileSync(POSTED_FILE, "utf8"));
   } catch {
     return [];
   }
 }
 
-function savePosted(posted) {
-  fs.writeFileSync(POSTED_FILE, JSON.stringify(posted.slice(0, 500), null, 2));
+function savePosted(items) {
+  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-800), null, 2));
 }
 
 function cleanText(text = "") {
@@ -52,6 +54,8 @@ function cleanText(text = "") {
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
     .replace(/&#8217;/g, "'")
     .replace(/&#8220;/g, '"')
     .replace(/&#8221;/g, '"')
@@ -68,181 +72,378 @@ function escapeHtml(text = "") {
     .replace(/>/g, "&gt;");
 }
 
-function shortText(text, max = 220) {
-  const clean = cleanText(text);
-  if (clean.length <= max) return clean;
-  return clean.slice(0, max).trim() + "...";
+function normalizeTitle(title = "") {
+  return cleanText(title)
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function getImpact(title = "", content = "") {
-  const text = `${title} ${content}`.toLowerCase();
+function shorten(text = "", max = 230) {
+  text = cleanText(text);
+  if (text.length <= max) return text;
+  return text.slice(0, max).trim() + "...";
+}
+
+function getDescription(item) {
+  return shorten(
+    item.contentSnippet ||
+    item.summary ||
+    item.content ||
+    item.contentEncoded ||
+    "",
+    230
+  );
+}
+
+function detectImpact(item) {
+  const text = `${item.title || ""} ${getDescription(item)}`.toLowerCase();
 
   if (
-    text.includes("sec") ||
-    text.includes("cftc") ||
-    text.includes("lawsuit") ||
-    text.includes("sued") ||
+    text.includes("breaking") ||
     text.includes("hack") ||
     text.includes("exploit") ||
+    text.includes("liquidation") ||
+    text.includes("crash") ||
+    text.includes("lawsuit") ||
+    text.includes("sec charges") ||
+    text.includes("bankruptcy")
+  ) return "Breaking";
+
+  if (
     text.includes("etf") ||
-    text.includes("fed") ||
+    text.includes("blackrock") ||
+    text.includes("fidelity") ||
     text.includes("binance") ||
-    text.includes("coinbase")
-  ) {
-    return "High";
-  }
+    text.includes("coinbase") ||
+    text.includes("kraken") ||
+    text.includes("sec") ||
+    text.includes("fed") ||
+    text.includes("whale") ||
+    text.includes("institutional")
+  ) return "High";
 
   if (
     text.includes("bitcoin") ||
+    text.includes("btc") ||
     text.includes("ethereum") ||
+    text.includes("eth") ||
     text.includes("solana") ||
-    text.includes("whale") ||
-    text.includes("liquidation") ||
-    text.includes("futures")
-  ) {
-    return "Medium";
-  }
+    text.includes("sol") ||
+    text.includes("market") ||
+    text.includes("price") ||
+    text.includes("trader") ||
+    text.includes("analyst")
+  ) return "Medium";
 
   return "Low";
 }
 
-function isRecent(item) {
-  const date = item.isoDate || item.pubDate;
-  if (!date) return true;
-
-  const published = new Date(date).getTime();
-  const now = Date.now();
-  const sixHours = 6 * 60 * 60 * 1000;
-
-  return now - published <= sixHours;
-}
-
 function getImageUrl(item) {
-  if (item.enclosure && item.enclosure.url) return item.enclosure.url;
+  if (item.enclosure?.url) return item.enclosure.url;
 
   if (item.mediaContent) {
-    if (Array.isArray(item.mediaContent) && item.mediaContent[0]?.$?.url) {
-      return item.mediaContent[0].$.url;
+    if (Array.isArray(item.mediaContent)) {
+      const found = item.mediaContent.find(x => x?.$?.url);
+      if (found) return found.$.url;
     }
-
-    if (item.mediaContent.$?.url) {
-      return item.mediaContent.$.url;
-    }
-
-    if (item.mediaContent.url) {
-      return item.mediaContent.url;
-    }
+    if (item.mediaContent.$?.url) return item.mediaContent.$.url;
   }
 
   if (item.mediaThumbnail) {
-    if (Array.isArray(item.mediaThumbnail) && item.mediaThumbnail[0]?.$?.url) {
-      return item.mediaThumbnail[0].$.url;
+    if (Array.isArray(item.mediaThumbnail)) {
+      const found = item.mediaThumbnail.find(x => x?.$?.url);
+      if (found) return found.$.url;
     }
-
-    if (item.mediaThumbnail.$?.url) {
-      return item.mediaThumbnail.$.url;
-    }
-
-    if (item.mediaThumbnail.url) {
-      return item.mediaThumbnail.url;
-    }
+    if (item.mediaThumbnail.$?.url) return item.mediaThumbnail.$.url;
   }
 
-  const html = item.contentEncoded || item.content || "";
-  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (imgMatch && imgMatch[1]) return imgMatch[1];
+  const html = item.content || item.contentEncoded || item.summary || "";
+  const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (match?.[1]) return match[1];
 
-  return null;
+  return "";
 }
 
-async function postArticle(item, posted) {
-  const link = item.link;
-  const title = cleanText(item.title || "Crypto News");
-  const description = shortText(
-    item.contentSnippet || item.summary || item.content || item.contentEncoded || "",
-    230
-  );
+function isTooOld(item) {
+  const dateRaw = item.isoDate || item.pubDate;
+  if (!dateRaw) return false;
 
-  const impact = getImpact(title, description);
+  const date = new Date(dateRaw);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const ageHours = (Date.now() - date.getTime()) / 3600000;
+  return ageHours > 6;
+}
+
+function isWeakNews(item) {
+  const text = `${item.title || ""} ${getDescription(item)}`.toLowerCase();
+
+  return (
+    text.includes("podcast") ||
+    text.includes("newsletter") ||
+    text.includes("video:") ||
+    text.includes("sponsored") ||
+    text.includes("press release") ||
+    text.includes("partner content") ||
+    text.includes("opinion")
+  );
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+  const words = cleanText(text).split(" ");
+  let line = "";
+  const lines = [];
+
+  for (const word of words) {
+    const testLine = line + word + " ";
+    const width = ctx.measureText(testLine).width;
+
+    if (width > maxWidth && line.length > 0) {
+      lines.push(line.trim());
+      line = word + " ";
+    } else {
+      line = testLine;
+    }
+
+    if (lines.length >= maxLines) break;
+  }
+
+  if (lines.length < maxLines && line.trim()) {
+    lines.push(line.trim());
+  }
+
+  const finalLines = lines.slice(0, maxLines);
+
+  if (finalLines.length === maxLines) {
+    finalLines[maxLines - 1] = finalLines[maxLines - 1].replace(/\.*$/, "") + "...";
+  }
+
+  finalLines.forEach((l, i) => {
+    ctx.fillText(l, x, y + i * lineHeight);
+  });
+}
+
+function impactColor(impact) {
+  if (impact === "Breaking") return "#ff3030";
+  if (impact === "High") return "#ff3f8f";
+  if (impact === "Medium") return "#ffd23f";
+  return "#8c8c8c";
+}
+
+function coverImage(ctx, img, x, y, w, h) {
+  const scale = Math.max(w / img.width, h / img.height);
+  const nw = img.width * scale;
+  const nh = img.height * scale;
+  const nx = x + (w - nw) / 2;
+  const ny = y + (h - nh) / 2;
+  ctx.drawImage(img, nx, ny, nw, nh);
+}
+
+async function createPremiumCard(item) {
+  const width = 1080;
+  const height = 1080;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  const title = cleanText(item.title || "Crypto Market Update");
+  const description = getDescription(item);
+  const impact = detectImpact(item);
   const imageUrl = getImageUrl(item);
 
-  const caption =
-`📰 <b>${escapeHtml(title)}</b>
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#050816");
+  bg.addColorStop(0.5, "#071426");
+  bg.addColorStop(1, "#02040a");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
 
-${escapeHtml(description)}
+  try {
+    const img = await loadImage(imageUrl);
+    coverImage(ctx, img, 0, 0, width, 610);
 
-<b>Market Impact:</b> ${escapeHtml(impact)}`;
+    const overlay = ctx.createLinearGradient(0, 260, 0, 650);
+    overlay.addColorStop(0, "rgba(0,0,0,0.05)");
+    overlay.addColorStop(1, "rgba(2,4,10,0.96)");
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 260, width, 390);
+  } catch (err) {
+    console.log("Image load failed:", err.message);
+  }
 
-  const options = {
+  ctx.fillStyle = "rgba(2,4,10,0.92)";
+  ctx.fillRect(0, 610, width, 470);
+
+  ctx.strokeStyle = "rgba(110, 160, 255, 0.35)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(34, 34, width - 68, height - 68);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(60, 60, 210, 54);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 24px Arial";
+  ctx.fillText("WAI NEWS", 88, 96);
+
+  ctx.fillStyle = impactColor(impact);
+  ctx.fillRect(780, 60, 230, 54);
+
+  ctx.fillStyle = impact === "Medium" ? "#000000" : "#ffffff";
+  ctx.font = "bold 23px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(impact.toUpperCase(), 895, 96);
+  ctx.textAlign = "left";
+
+  ctx.font = "bold 54px Arial";
+  ctx.fillStyle = "#ffffff";
+  wrapText(ctx, title, 70, 680, 940, 64, 3);
+
+  ctx.font = "31px Arial";
+  ctx.fillStyle = "#d8e4ff";
+  wrapText(ctx, description, 70, 885, 940, 43, 3);
+
+  ctx.fillStyle = "#8fb7ff";
+  ctx.font = "24px Arial";
+  ctx.fillText("Powered by WAI Intelligence", 70, 1010);
+
+  ctx.fillStyle = impactColor(impact);
+  ctx.font = "bold 24px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText(`MARKET IMPACT: ${impact.toUpperCase()}`, 1010, 1010);
+  ctx.textAlign = "left";
+
+  return canvas.toBuffer("image/png");
+}
+
+function formatCaption(item) {
+  const description = escapeHtml(getDescription(item));
+  return `${description}`;
+}
+
+async function postNews(item) {
+  const cardBuffer = await createPremiumCard(item);
+  const caption = formatCaption(item);
+
+  await bot.sendPhoto(TELEGRAM_CHANNEL_ID, cardBuffer, {
+    caption,
     parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
           {
             text: "📖 Read Full Article",
-            url: link
+            url: item.link
           }
         ]
       ]
     }
-  };
-
-  if (imageUrl) {
-    await bot.sendPhoto(TELEGRAM_CHANNEL_ID, imageUrl, {
-      caption,
-      ...options
-    });
-  } else {
-    await bot.sendMessage(TELEGRAM_CHANNEL_ID, caption, {
-      disable_web_page_preview: true,
-      ...options
-    });
-  }
-
-  posted.unshift(link);
-  savePosted(posted);
-
-  console.log(`Posted: ${title}`);
+  });
 }
 
-async function fetchNews() {
+async function checkNews() {
+  if (!TELEGRAM_CHANNEL_ID) {
+    console.log("Missing TELEGRAM_CHANNEL_ID");
+    return;
+  }
+
   const posted = loadPosted();
 
-  for (const feed of FEEDS) {
+  for (const feedUrl of FEEDS) {
     try {
-      const data = await parser.parseURL(feed);
+      const feed = await parser.parseURL(feedUrl);
+      console.log("RSS FEED:", feedUrl, "ITEMS:", feed.items.length);
 
-      for (const item of data.items || []) {
-        const link = item.link;
+      const items = feed.items.slice(0, 4);
+      let postedFromThisFeed = 0;
 
-        if (!link) continue;
-        if (posted.includes(link)) continue;
-        if (!isRecent(item)) continue;
+      for (const item of items) {
+        if (postedFromThisFeed >= 1) break;
 
-        await postArticle(item, posted);
+        const imageUrl = getImageUrl(item);
+        const id = item.guid || item.link || item.title;
+        const titleKey = "title:" + normalizeTitle(item.title);
+        const impact = detectImpact(item);
+
+        if (!id || !item.link) continue;
+        if (posted.includes(id) || posted.includes(titleKey)) continue;
+
+        if (!imageUrl) {
+          console.log("Skipped - no image:", item.title);
+          continue;
+        }
+
+        if (isTooOld(item)) {
+          console.log("Skipped - older than 6h:", item.title);
+          continue;
+        }
+
+        if (isWeakNews(item)) {
+          console.log("Skipped - weak news:", item.title);
+          continue;
+        }
+
+        if (impact === "Low") {
+          console.log("Skipped - low impact:", item.title);
+          continue;
+        }
+
+        await postNews(item);
+
+        posted.push(id);
+        posted.push(titleKey);
+        savePosted(posted);
+
+        postedFromThisFeed++;
+
+        console.log("Posted:", item.title);
+
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
     } catch (err) {
-      console.error(`Feed error: ${feed}`, err.message);
+      console.log("Feed error:", feedUrl, err.message);
     }
   }
 }
 
-async function start() {
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.error("Missing TELEGRAM_BOT_TOKEN");
-    process.exit(1);
-  }
+bot.onText(/\/status/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    `📰 WAI News Bot
 
-  if (!TELEGRAM_CHANNEL_ID) {
-    console.error("Missing TELEGRAM_CHANNEL_ID");
-    process.exit(1);
-  }
+Status: ON ✅
+Interval: ${CHECK_INTERVAL_MINUTES} minutes
+Feeds: ${FEEDS.length}
+Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-  console.log("WAI News Bot started");
-  await fetchNews();
+Post style: Premium WAI card ✅
+Filters:
+- Breaking / High / Medium only ✅
+- Low impact skipped ✅
+- Duplicate titles skipped ✅
+- Articles without image skipped ✅
+- Max age: 6h ✅
+- Max 1 article per feed ✅`
+  );
+});
 
-  setInterval(fetchNews, CHECK_INTERVAL_MINUTES * 60 * 1000);
-}
+bot.onText(/\/testnews/, async (msg) => {
+  const testItem = {
+    title: "Bitcoin Reclaims Key Support As Traders Watch Market Momentum",
+    contentSnippet:
+      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases and institutional flows remain in focus.",
+    link: "https://cointelegraph.com/",
+    enclosure: {
+      url: "https://images.unsplash.com/photo-1621504450181-5d356f61d307?w=1200"
+    },
+    pubDate: new Date().toUTCString()
+  };
 
-start();
+  await postNews(testItem);
+  bot.sendMessage(msg.chat.id, "✅ Test news sent");
+});
+
+console.log("WAI News Bot started");
+
+checkNews();
+setInterval(checkNews, CHECK_INTERVAL_MINUTES * 60 * 1000);
