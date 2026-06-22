@@ -191,45 +191,18 @@ function isWeakNews(item) {
   );
 }
 
-function wrapText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
-  const words = cleanText(text).split(" ");
-  let line = "";
-  const lines = [];
-
-  for (const word of words) {
-    const testLine = line + word + " ";
-    const width = ctx.measureText(testLine).width;
-
-    if (width > maxWidth && line.length > 0) {
-      lines.push(line.trim());
-      line = word + " ";
-    } else {
-      line = testLine;
-    }
-
-    if (lines.length >= maxLines) break;
-  }
-
-  if (lines.length < maxLines && line.trim()) {
-    lines.push(line.trim());
-  }
-
-  const finalLines = lines.slice(0, maxLines);
-
-  if (finalLines.length === maxLines) {
-    finalLines[maxLines - 1] = finalLines[maxLines - 1].replace(/\.*$/, "") + "...";
-  }
-
-  finalLines.forEach((l, i) => {
-    ctx.fillText(l, x, y + i * lineHeight);
-  });
-}
-
 function impactColor(impact) {
   if (impact === "Breaking") return "#ff3030";
   if (impact === "High") return "#ff3f8f";
   if (impact === "Medium") return "#ffd23f";
   return "#8c8c8c";
+}
+
+function impactLabel(impact) {
+  if (impact === "Breaking") return "🚨 BREAKING NEWS";
+  if (impact === "High") return "🔥 HIGH IMPACT";
+  if (impact === "Medium") return "📊 MARKET UPDATE";
+  return "MARKET UPDATE";
 }
 
 function coverImage(ctx, img, x, y, w, h) {
@@ -248,8 +221,6 @@ async function createPremiumCard(item) {
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
-  const title = cleanText(item.title || "Crypto Market Update");
-  const description = getDescription(item);
   const impact = detectImpact(item);
   const imageUrl = getImageUrl(item);
 
@@ -258,37 +229,31 @@ async function createPremiumCard(item) {
 
   try {
     const img = await loadImage(imageUrl);
-    coverImage(ctx, img, 0, 0, width, 900);
+    coverImage(ctx, img, 0, 0, width, height);
   } catch (err) {
     console.log("Image load failed:", err.message);
   }
 
-  const fade = ctx.createLinearGradient(0, 650, 0, 780);
-fade.addColorStop(0, "rgba(5,8,20,0)");
-fade.addColorStop(1, "rgba(5,8,20,1)");
-ctx.fillStyle = fade;
-ctx.fillRect(0, 650, width, 130);
+  const topFade = ctx.createLinearGradient(0, 0, 0, 220);
+  topFade.addColorStop(0, "rgba(0,0,0,0.68)");
+  topFade.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = topFade;
+  ctx.fillRect(0, 0, width, 220);
 
-ctx.fillStyle = "#050814";
-ctx.fillRect(0, 780, width, 300);
-
-
-  ctx.font = "bold 52px Arial";
-  ctx.fillStyle = "#ffffff";
-  wrapText(ctx, title, 70, 855, 940, 42, 3);
-
-  ctx.font = "30px Arial";
-  ctx.fillStyle = "#d9e1ff";
-  wrapText(ctx, description, 70, 930, 940, 42, 2);
-
-  ctx.fillStyle = "#8fb7ff";
-  ctx.font = "23px Arial";
-  ctx.fillText("Powered by WAI Intelligence", 70, 1010);
+  ctx.fillStyle = "rgba(0,0,0,0.62)";
+  ctx.fillRect(40, 40, 1000, 86);
 
   ctx.fillStyle = impactColor(impact);
-  ctx.font = "bold 23px Arial";
+  ctx.fillRect(40, 40, 14, 86);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 34px Arial";
+  ctx.fillText(impactLabel(impact), 80, 94);
+
+  ctx.font = "bold 25px Arial";
   ctx.textAlign = "right";
-  ctx.fillText(`MARKET IMPACT: ${impact.toUpperCase()}`, 1010, 1010);
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillText("WAI NEWS", 1010, 94);
   ctx.textAlign = "left";
 
   return canvas.toBuffer("image/png");
@@ -393,7 +358,7 @@ Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-Post style: Article image card ✅
+Post style: Full image card ✅
 Filters:
 - Breaking / High / Medium only ✅
 - Low impact skipped ✅
