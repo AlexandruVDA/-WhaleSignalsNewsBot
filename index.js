@@ -275,11 +275,11 @@ ctx.fillRect(0, 780, width, 300);
 
   ctx.font = "bold 52px Arial";
   ctx.fillStyle = "#ffffff";
-  wrapText(ctx, title, 70, 720, 940, 62, 2);
+  wrapText(ctx, title, 70, 855, 940, 42, 3);
 
   ctx.font = "30px Arial";
   ctx.fillStyle = "#d9e1ff";
-  wrapText(ctx, description, 70, 855, 940, 42, 3);
+  wrapText(ctx, description, 70, 930, 940, 42, 2);
 
   ctx.fillStyle = "#8fb7ff";
   ctx.font = "23px Arial";
