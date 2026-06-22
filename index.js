@@ -80,7 +80,7 @@ function normalizeTitle(title = "") {
     .trim();
 }
 
-function shorten(text = "", max = 360) {
+function shorten(text = "", max = 280) {
   text = cleanText(text);
   if (text.length <= max) return text;
   return text.slice(0, max).trim() + "...";
@@ -93,7 +93,7 @@ function getDescription(item) {
     item.content ||
     item.contentEncoded ||
     "",
-    360
+    280
   );
 }
 
@@ -211,20 +211,6 @@ function isWeakNews(item) {
   );
 }
 
-function impactColor(impact) {
-  if (impact === "Breaking") return "#c1121f";
-  if (impact === "High") return "#b5179e";
-  if (impact === "Medium") return "#d6a100";
-  return "#8c8c8c";
-}
-
-function impactLabel(impact) {
-  if (impact === "Breaking") return "BREAKING";
-  if (impact === "High") return "HIGH IMPACT";
-  if (impact === "Medium") return "MARKET UPDATE";
-  return "MARKET UPDATE";
-}
-
 function coverImage(ctx, img, x, y, w, h) {
   const scale = Math.max(w / img.width, h / img.height);
   const nw = img.width * scale;
@@ -235,13 +221,12 @@ function coverImage(ctx, img, x, y, w, h) {
   ctx.drawImage(img, nx, ny, nw, nh);
 }
 
-async function createPremiumCard(item, sourceName) {
+async function createPremiumCard(item) {
   const width = 1080;
   const height = 1080;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
-  const impact = detectImpact(item);
   const imageUrl = getImageUrl(item);
 
   ctx.fillStyle = "#050814";
@@ -254,32 +239,6 @@ async function createPremiumCard(item, sourceName) {
     console.log("Image load failed:", err.message);
   }
 
-  const topFade = ctx.createLinearGradient(0, 0, 0, 240);
-  topFade.addColorStop(0, "rgba(0,0,0,0.72)");
-  topFade.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = topFade;
-  ctx.fillRect(0, 0, width, 240);
-
-  ctx.fillStyle = "rgba(0,0,0,0.62)";
-  ctx.fillRect(36, 36, 1008, 92);
-
-  ctx.fillStyle = impactColor(impact);
-  ctx.fillRect(36, 36, 12, 92);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 32px Arial";
-  ctx.fillText(impactLabel(impact), 72, 78);
-
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
-  ctx.font = "24px Georgia";
-  ctx.fillText(`Source: ${sourceName}`, 72, 110);
-
-  ctx.font = "bold 24px Arial";
-  ctx.textAlign = "right";
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.fillText("WAI NEWS DESK", 1010, 92);
-  ctx.textAlign = "left";
-
   return canvas.toBuffer("image/png");
 }
 
@@ -288,14 +247,12 @@ function formatCaption(item, sourceName) {
   const impact = escapeHtml(detectImpact(item));
 
   return `<b>${escapeHtml(sourceName)}</b>
-
 ${description}
-
 <b>Impact:</b> ${impact}`;
 }
 
 async function postNews(item, sourceName) {
-  const cardBuffer = await createPremiumCard(item, sourceName);
+  const cardBuffer = await createPremiumCard(item);
   const caption = formatCaption(item, sourceName);
 
   await bot.sendPhoto(TELEGRAM_CHANNEL_ID, cardBuffer, {
@@ -391,7 +348,7 @@ Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-Post style: Newspaper image card
+Post style: Clean newspaper card
 Filters:
 - Breaking / High / Medium only
 - Low impact skipped
@@ -406,7 +363,7 @@ bot.onText(/\/testnews/, async (msg) => {
   const testItem = {
     title: "Bitcoin Reclaims Key Support As Traders Watch Market Momentum",
     contentSnippet:
-      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases. Eased ETF selling and improving risk appetite are being offset by cautious institutional flows, leaving bitcoin range-bound.",
+      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases. Eased ETF selling and improving risk appetite are being offset by cautious institutional flows.",
     link: "https://cointelegraph.com/",
     enclosure: {
       url: "https://images.unsplash.com/photo-1621504450181-5d356f61d307?w=1200"
