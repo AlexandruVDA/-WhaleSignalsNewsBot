@@ -80,7 +80,7 @@ function normalizeTitle(title = "") {
     .trim();
 }
 
-function shorten(text = "", max = 230) {
+function shorten(text = "", max = 360) {
   text = cleanText(text);
   if (text.length <= max) return text;
   return text.slice(0, max).trim() + "...";
@@ -93,7 +93,7 @@ function getDescription(item) {
     item.content ||
     item.contentEncoded ||
     "",
-    230
+    360
   );
 }
 
@@ -134,10 +134,30 @@ function detectImpact(item) {
     text.includes("market") ||
     text.includes("price") ||
     text.includes("trader") ||
-    text.includes("analyst")
+    text.includes("analyst") ||
+    text.includes("crypto")
   ) return "Medium";
 
   return "Low";
+}
+
+function getSourceName(feedTitle = "", feedUrl = "") {
+  const text = `${feedTitle} ${feedUrl}`.toLowerCase();
+
+  if (text.includes("cointelegraph")) return "Cointelegraph";
+  if (text.includes("decrypt")) return "Decrypt";
+  if (text.includes("theblock")) return "The Block";
+  if (text.includes("bitcoinist")) return "Bitcoinist";
+  if (text.includes("cryptoslate")) return "CryptoSlate";
+  if (text.includes("u.today") || text.includes("utoday")) return "U.Today";
+  if (text.includes("newsbtc")) return "NewsBTC";
+  if (text.includes("beincrypto")) return "BeInCrypto";
+  if (text.includes("cryptopolitan")) return "Cryptopolitan";
+  if (text.includes("zycrypto")) return "ZyCrypto";
+  if (text.includes("ambcrypto")) return "AMBCrypto";
+  if (text.includes("coindesk")) return "CoinDesk";
+
+  return "Crypto News";
 }
 
 function getImageUrl(item) {
@@ -192,16 +212,16 @@ function isWeakNews(item) {
 }
 
 function impactColor(impact) {
-  if (impact === "Breaking") return "#ff3030";
-  if (impact === "High") return "#ff3f8f";
-  if (impact === "Medium") return "#ffd23f";
+  if (impact === "Breaking") return "#c1121f";
+  if (impact === "High") return "#b5179e";
+  if (impact === "Medium") return "#d6a100";
   return "#8c8c8c";
 }
 
 function impactLabel(impact) {
-  if (impact === "Breaking") return "🚨 BREAKING NEWS";
-  if (impact === "High") return "🔥 HIGH IMPACT";
-  if (impact === "Medium") return "📊 MARKET UPDATE";
+  if (impact === "Breaking") return "BREAKING";
+  if (impact === "High") return "HIGH IMPACT";
+  if (impact === "Medium") return "MARKET UPDATE";
   return "MARKET UPDATE";
 }
 
@@ -215,7 +235,7 @@ function coverImage(ctx, img, x, y, w, h) {
   ctx.drawImage(img, nx, ny, nw, nh);
 }
 
-async function createPremiumCard(item) {
+async function createPremiumCard(item, sourceName) {
   const width = 1080;
   const height = 1080;
   const canvas = createCanvas(width, height);
@@ -234,38 +254,49 @@ async function createPremiumCard(item) {
     console.log("Image load failed:", err.message);
   }
 
-  const topFade = ctx.createLinearGradient(0, 0, 0, 220);
-  topFade.addColorStop(0, "rgba(0,0,0,0.68)");
+  const topFade = ctx.createLinearGradient(0, 0, 0, 240);
+  topFade.addColorStop(0, "rgba(0,0,0,0.72)");
   topFade.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = topFade;
-  ctx.fillRect(0, 0, width, 220);
+  ctx.fillRect(0, 0, width, 240);
 
   ctx.fillStyle = "rgba(0,0,0,0.62)";
-  ctx.fillRect(40, 40, 1000, 86);
+  ctx.fillRect(36, 36, 1008, 92);
 
   ctx.fillStyle = impactColor(impact);
-  ctx.fillRect(40, 40, 14, 86);
+  ctx.fillRect(36, 36, 12, 92);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 34px Arial";
-  ctx.fillText(impactLabel(impact), 80, 94);
+  ctx.font = "bold 32px Arial";
+  ctx.fillText(impactLabel(impact), 72, 78);
 
-  ctx.font = "bold 25px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.font = "24px Georgia";
+  ctx.fillText(`Source: ${sourceName}`, 72, 110);
+
+  ctx.font = "bold 24px Arial";
   ctx.textAlign = "right";
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.fillText("WAI NEWS", 1010, 94);
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fillText("WAI NEWS DESK", 1010, 92);
   ctx.textAlign = "left";
 
   return canvas.toBuffer("image/png");
 }
 
-function formatCaption(item) {
-  return escapeHtml(getDescription(item));
+function formatCaption(item, sourceName) {
+  const description = escapeHtml(getDescription(item));
+  const impact = escapeHtml(detectImpact(item));
+
+  return `<b>${escapeHtml(sourceName)}</b>
+
+${description}
+
+<b>Impact:</b> ${impact}`;
 }
 
-async function postNews(item) {
-  const cardBuffer = await createPremiumCard(item);
-  const caption = formatCaption(item);
+async function postNews(item, sourceName) {
+  const cardBuffer = await createPremiumCard(item, sourceName);
+  const caption = formatCaption(item, sourceName);
 
   await bot.sendPhoto(TELEGRAM_CHANNEL_ID, cardBuffer, {
     caption,
@@ -274,7 +305,7 @@ async function postNews(item) {
       inline_keyboard: [
         [
           {
-            text: "📖 Read Full Article",
+            text: "Read Full Article",
             url: item.link
           }
         ]
@@ -294,7 +325,9 @@ async function checkNews() {
   for (const feedUrl of FEEDS) {
     try {
       const feed = await parser.parseURL(feedUrl);
-      console.log("RSS FEED:", feedUrl, "ITEMS:", feed.items.length);
+      const sourceName = getSourceName(feed.title || "", feedUrl);
+
+      console.log("RSS FEED:", sourceName, "ITEMS:", feed.items.length);
 
       const items = feed.items.slice(0, 4);
       let postedFromThisFeed = 0;
@@ -330,7 +363,7 @@ async function checkNews() {
           continue;
         }
 
-        await postNews(item);
+        await postNews(item, sourceName);
 
         posted.push(id);
         posted.push(titleKey);
@@ -351,21 +384,21 @@ async function checkNews() {
 bot.onText(/\/status/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    `📰 WAI News Bot
+    `WAI News Bot
 
-Status: ON ✅
+Status: ON
 Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-Post style: Full image card ✅
+Post style: Newspaper image card
 Filters:
-- Breaking / High / Medium only ✅
-- Low impact skipped ✅
-- Duplicate titles skipped ✅
-- Articles without image skipped ✅
-- Max age: 6h ✅
-- Max 1 article per feed ✅`
+- Breaking / High / Medium only
+- Low impact skipped
+- Duplicate titles skipped
+- Articles without image skipped
+- Max age: 6h
+- Max 1 article per feed`
   );
 });
 
@@ -373,7 +406,7 @@ bot.onText(/\/testnews/, async (msg) => {
   const testItem = {
     title: "Bitcoin Reclaims Key Support As Traders Watch Market Momentum",
     contentSnippet:
-      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases and institutional flows remain in focus.",
+      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases. Eased ETF selling and improving risk appetite are being offset by cautious institutional flows, leaving bitcoin range-bound.",
     link: "https://cointelegraph.com/",
     enclosure: {
       url: "https://images.unsplash.com/photo-1621504450181-5d356f61d307?w=1200"
@@ -381,8 +414,8 @@ bot.onText(/\/testnews/, async (msg) => {
     pubDate: new Date().toUTCString()
   };
 
-  await postNews(testItem);
-  bot.sendMessage(msg.chat.id, "✅ Test news sent");
+  await postNews(testItem, "Cointelegraph");
+  bot.sendMessage(msg.chat.id, "Test news sent");
 });
 
 console.log("WAI News Bot started");
