@@ -258,7 +258,7 @@ async function createPremiumCard(item) {
 
   try {
     const img = await loadImage(imageUrl);
-    coverImage(ctx, img, 0, 0, width, 780);
+    coverImage(ctx, img, 0, 0, width, 900);
   } catch (err) {
     console.log("Image load failed:", err.message);
   }
