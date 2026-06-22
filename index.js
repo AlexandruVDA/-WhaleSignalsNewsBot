@@ -258,19 +258,20 @@ async function createPremiumCard(item) {
 
   try {
     const img = await loadImage(imageUrl);
-    coverImage(ctx, img, 0, 0, width, 650);
+    coverImage(ctx, img, 0, 0, width, 780);
   } catch (err) {
     console.log("Image load failed:", err.message);
   }
 
-  const fade = ctx.createLinearGradient(0, 520, 0, 700);
-  fade.addColorStop(0, "rgba(5,8,20,0)");
-  fade.addColorStop(1, "rgba(5,8,20,1)");
-  ctx.fillStyle = fade;
-  ctx.fillRect(0, 520, width, 180);
+  const fade = ctx.createLinearGradient(0, 650, 0, 780);
+fade.addColorStop(0, "rgba(5,8,20,0)");
+fade.addColorStop(1, "rgba(5,8,20,1)");
+ctx.fillStyle = fade;
+ctx.fillRect(0, 650, width, 130);
 
-  ctx.fillStyle = "#050814";
-  ctx.fillRect(0, 650, width, 430);
+ctx.fillStyle = "#050814";
+ctx.fillRect(0, 780, width, 300);
+
 
   ctx.font = "bold 52px Arial";
   ctx.fillStyle = "#ffffff";
