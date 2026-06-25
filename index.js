@@ -21,12 +21,15 @@ const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
 const NEWS_MAX_AGE_HOURS = Number(process.env.NEWS_MAX_AGE_HOURS || 6);
 const MAX_NEWS_PER_DAY = Number(process.env.MAX_NEWS_PER_DAY || 30);
+const MAX_NEWS_PER_CHECK = Number(process.env.MAX_NEWS_PER_CHECK || 2);
+
+const TITLE_MAX_CHARS = Number(process.env.TITLE_MAX_CHARS || 85);
+const DESCRIPTION_MAX_CHARS = Number(process.env.DESCRIPTION_MAX_CHARS || 150);
 
 const POSTED_FILE = "posted.json";
 const DAILY_LIMIT_FILE = "daily_limit.json";
 
 const FEEDS = [
-  // Crypto
   "https://cointelegraph.com/rss",
   "https://decrypt.co/feed",
   "https://www.theblock.co/rss.xml",
@@ -40,7 +43,6 @@ const FEEDS = [
   "https://ambcrypto.com/feed",
   "https://www.coindesk.com/arc/outboundfeeds/rss/",
 
-  // Stock market / macro / gold / commodities
   "https://www.investing.com/rss/news_25.rss",
   "https://www.investing.com/rss/news_95.rss",
   "https://www.investing.com/rss/news_301.rss",
@@ -77,10 +79,16 @@ function savePosted(items) {
 }
 
 function loadDailyLimit() {
-  const daily = loadJson(DAILY_LIMIT_FILE, { date: todayKey(), count: 0 });
+  const daily = loadJson(DAILY_LIMIT_FILE, {
+    date: todayKey(),
+    count: 0
+  });
 
   if (daily.date !== todayKey()) {
-    return { date: todayKey(), count: 0 };
+    return {
+      date: todayKey(),
+      count: 0
+    };
   }
 
   return daily;
@@ -133,10 +141,14 @@ function normalizeTitle(title = "") {
     .trim();
 }
 
-function shorten(text = "", max = 280) {
-  text = cleanText(text);
-  if (text.length <= max) return text;
-  return text.slice(0, max).trim() + "...";
+function shorten(text = "", max = 150) {
+  const clean = cleanText(text);
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max - 3).trim() + "...";
+}
+
+function getTitle(item) {
+  return shorten(item.title || "Market Update", TITLE_MAX_CHARS);
 }
 
 function getDescription(item) {
@@ -146,7 +158,7 @@ function getDescription(item) {
     item.content ||
     item.contentEncoded ||
     "",
-    280
+    DESCRIPTION_MAX_CHARS
   );
 }
 
@@ -158,15 +170,28 @@ function detectCategory(item) {
   const text = getFullText(item);
 
   if (
+    text.includes("bitcoin") ||
+    text.includes("btc")
+  ) return "₿ Bitcoin";
+
+  if (
+    text.includes("ethereum") ||
+    text.includes("eth")
+  ) return "Ξ Ethereum";
+
+  if (
     text.includes("gold") ||
-    text.includes("xau") ||
+    text.includes("xau")
+  ) return "🥇 Gold";
+
+  if (
     text.includes("silver") ||
     text.includes("oil") ||
     text.includes("commodity") ||
     text.includes("commodities") ||
     text.includes("brent") ||
     text.includes("wti")
-  ) return "Gold / Commodities";
+  ) return "🛢 Commodities";
 
   if (
     text.includes("fed") ||
@@ -184,11 +209,12 @@ function detectCategory(item) {
     text.includes("recession") ||
     text.includes("jobs report") ||
     text.includes("unemployment")
-  ) return "Macro";
+  ) return "📊 Macro";
 
   if (
     text.includes("nasdaq") ||
     text.includes("s&p 500") ||
+    text.includes("s&p") ||
     text.includes("dow jones") ||
     text.includes("wall street") ||
     text.includes("stock market") ||
@@ -197,21 +223,26 @@ function detectCategory(item) {
     text.includes("apple") ||
     text.includes("microsoft") ||
     text.includes("tesla")
-  ) return "Stocks";
+  ) return "📈 Stocks";
 
-  return "Crypto";
+  return "🟠 Crypto";
 }
 
 function isRelevantMarketNews(item) {
   const text = getFullText(item);
 
   const keywords = [
-    "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "xrp", "crypto", "blockchain",
-    "binance", "coinbase", "kraken", "etf", "sec", "whale", "institutional",
-    "fed", "federal reserve", "ecb", "inflation", "cpi", "ppi", "interest rate",
-    "rate cut", "rate hike", "dollar", "dxy", "gdp", "recession", "jobs report", "unemployment",
-    "nasdaq", "s&p 500", "dow jones", "wall street", "stocks", "stock market",
-    "nvidia", "apple", "microsoft", "tesla",
+    "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "xrp",
+    "crypto", "blockchain", "binance", "coinbase", "kraken",
+    "etf", "sec", "whale", "institutional", "blackrock", "fidelity",
+
+    "fed", "federal reserve", "ecb", "inflation", "cpi", "ppi",
+    "interest rate", "rate cut", "rate hike", "dollar", "dxy",
+    "gdp", "recession", "jobs report", "unemployment",
+
+    "nasdaq", "s&p 500", "s&p", "dow jones", "wall street",
+    "stocks", "stock market", "nvidia", "apple", "microsoft", "tesla",
+
     "gold", "xau", "silver", "oil", "commodity", "commodities", "brent", "wti"
   ];
 
@@ -229,23 +260,16 @@ function detectImpact(item) {
     text.includes("crash") ||
     text.includes("plunge") ||
     text.includes("surge") ||
-    text.includes("lawsuit") ||
-    text.includes("sec charges") ||
     text.includes("bankruptcy") ||
     text.includes("emergency") ||
     text.includes("war") ||
-    text.includes("attack")
-  ) return "Breaking";
+    text.includes("attack") ||
+    text.includes("sec charges") ||
+    text.includes("lawsuit")
+  ) return "🔴 BREAKING";
 
   if (
-    text.includes("etf") ||
-    text.includes("blackrock") ||
-    text.includes("fidelity") ||
-    text.includes("binance") ||
-    text.includes("coinbase") ||
-    text.includes("kraken") ||
-    text.includes("sec") ||
-        text.includes("fed") ||
+    text.includes("fed") ||
     text.includes("federal reserve") ||
     text.includes("ecb") ||
     text.includes("cpi") ||
@@ -253,35 +277,24 @@ function detectImpact(item) {
     text.includes("rate cut") ||
     text.includes("rate hike") ||
     text.includes("jobs report") ||
+    text.includes("etf") ||
+    text.includes("blackrock") ||
+    text.includes("fidelity") ||
+    text.includes("binance") ||
+    text.includes("coinbase") ||
+    text.includes("kraken") ||
+    text.includes("sec") ||
     text.includes("nasdaq") ||
     text.includes("s&p 500") ||
+    text.includes("s&p") ||
     text.includes("dow jones") ||
     text.includes("wall street") ||
-    text.includes("gold hits") ||
+    text.includes("gold") ||
     text.includes("whale") ||
     text.includes("institutional")
-  ) return "High";
+  ) return "🟠 HIGH";
 
-  if (
-    text.includes("bitcoin") ||
-    text.includes("btc") ||
-    text.includes("ethereum") ||
-    text.includes("eth") ||
-    text.includes("solana") ||
-    text.includes("sol") ||
-    text.includes("xrp") ||
-    text.includes("market") ||
-    text.includes("price") ||
-    text.includes("trader") ||
-    text.includes("analyst") ||
-    text.includes("crypto") ||
-    text.includes("stocks") ||
-    text.includes("gold") ||
-    text.includes("oil") ||
-    text.includes("dollar")
-  ) return "Medium";
-
-  return "Low";
+  return "🟡 MEDIUM";
 }
 
 function getSourceName(feedTitle = "", feedUrl = "") {
@@ -312,6 +325,7 @@ function getImageUrl(item) {
       const found = item.mediaContent.find(x => x?.$?.url);
       if (found) return found.$.url;
     }
+
     if (item.mediaContent.$?.url) return item.mediaContent.$.url;
   }
 
@@ -320,11 +334,13 @@ function getImageUrl(item) {
       const found = item.mediaThumbnail.find(x => x?.$?.url);
       if (found) return found.$.url;
     }
+
     if (item.mediaThumbnail.$?.url) return item.mediaThumbnail.$.url;
   }
 
   const html = item.content || item.contentEncoded || item.summary || "";
   const match = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+
   if (match?.[1]) return match[1];
 
   return "";
@@ -351,7 +367,8 @@ function isWeakNews(item) {
     text.includes("sponsored") ||
     text.includes("press release") ||
     text.includes("partner content") ||
-    text.includes("opinion")
+    text.includes("opinion") ||
+    text.includes("advertisement")
   );
 }
 
@@ -387,14 +404,23 @@ async function createPremiumCard(item) {
 }
 
 function formatCaption(item, sourceName) {
+  const source = escapeHtml(sourceName);
   const category = escapeHtml(detectCategory(item));
+  const title = escapeHtml(getTitle(item));
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item));
 
-  return `<b>${escapeHtml(sourceName)}</b>
+  return `<b>Source • ${source}</b>
+
 <b>${category}</b>
+
+<b>${title}</b>
+
 ${description}
-<b>Market Impact:</b> ${impact}`;
+
+<b>Impact:</b> ${impact}
+
+Powered by WAI`;
 }
 
 async function postNews(item, sourceName) {
@@ -431,9 +457,11 @@ async function checkNews() {
   }
 
   const posted = loadPosted();
+  let postedThisCheck = 0;
 
   for (const feedUrl of FEEDS) {
     if (!canPostMoreNews()) break;
+    if (postedThisCheck >= MAX_NEWS_PER_CHECK) break;
 
     try {
       const feed = await parser.parseURL(feedUrl);
@@ -441,20 +469,24 @@ async function checkNews() {
 
       console.log("RSS FEED:", sourceName, "ITEMS:", feed.items.length);
 
-      const items = feed.items.slice(0, 5);
+      const items = feed.items.slice(0, 6);
       let postedFromThisFeed = 0;
 
       for (const item of items) {
         if (!canPostMoreNews()) break;
+        if (postedThisCheck >= MAX_NEWS_PER_CHECK) break;
         if (postedFromThisFeed >= 1) break;
 
         const imageUrl = getImageUrl(item);
         const id = item.guid || item.link || item.title;
         const titleKey = "title:" + normalizeTitle(item.title);
-        const impact = detectImpact(item);
 
         if (!id || !item.link) continue;
-        if (posted.includes(id) || posted.includes(titleKey)) continue;
+
+        if (posted.includes(id) || posted.includes(titleKey)) {
+          console.log("Skipped - duplicate:", item.title);
+          continue;
+        }
 
         if (!imageUrl) {
           console.log("Skipped - no image:", item.title);
@@ -472,12 +504,7 @@ async function checkNews() {
         }
 
         if (!isRelevantMarketNews(item)) {
-          console.log("Skipped - not relevant market news:", item.title);
-          continue;
-        }
-
-        if (impact === "Low") {
-          console.log("Skipped - low impact:", item.title);
+          console.log("Skipped - not relevant:", item.title);
           continue;
         }
 
@@ -488,6 +515,7 @@ async function checkNews() {
         savePosted(posted);
 
         postedFromThisFeed++;
+        postedThisCheck++;
 
         console.log("Posted:", item.title);
 
@@ -511,19 +539,30 @@ Interval: ${CHECK_INTERVAL_MINUTES} minutes
 Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
-Post style: Clean newspaper card
 Daily posts: ${daily.count}/${MAX_NEWS_PER_DAY}
+Max posts/check: ${MAX_NEWS_PER_CHECK}
 Max age: ${NEWS_MAX_AGE_HOURS}h
 
+Text limits:
+Title: ${TITLE_MAX_CHARS} characters
+Description: ${DESCRIPTION_MAX_CHARS} characters
+
+Impact levels:
+- BREAKING
+- HIGH
+- MEDIUM
+
 Categories:
+- Bitcoin
+- Ethereum
 - Crypto
 - Stocks
-- Gold / Commodities
+- Gold
+- Commodities
 - Macro
 
 Filters:
-- Breaking / High / Medium only
-- Low impact skipped
+- No Low impact
 - Duplicate titles skipped
 - Articles without image skipped
 - Weak/sponsored content skipped
@@ -550,7 +589,10 @@ bot.onText(/\/testnews/, async (msg) => {
 console.log("WAI News Bot started");
 console.log("Interval:", CHECK_INTERVAL_MINUTES, "minutes");
 console.log("Max news/day:", MAX_NEWS_PER_DAY);
+console.log("Max news/check:", MAX_NEWS_PER_CHECK);
 console.log("Max age:", NEWS_MAX_AGE_HOURS, "hours");
+console.log("Title chars:", TITLE_MAX_CHARS);
+console.log("Description chars:", DESCRIPTION_MAX_CHARS);
 console.log("Feeds:", FEEDS.length);
 
 checkNews();
