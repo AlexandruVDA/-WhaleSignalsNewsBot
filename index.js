@@ -19,9 +19,14 @@ const parser = new Parser({
 
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "");
 const CHECK_INTERVAL_MINUTES = Number(process.env.CHECK_INTERVAL_MINUTES || 15);
+const NEWS_MAX_AGE_HOURS = Number(process.env.NEWS_MAX_AGE_HOURS || 6);
+const MAX_NEWS_PER_DAY = Number(process.env.MAX_NEWS_PER_DAY || 30);
+
 const POSTED_FILE = "posted.json";
+const DAILY_LIMIT_FILE = "daily_limit.json";
 
 const FEEDS = [
+  // Crypto
   "https://cointelegraph.com/rss",
   "https://decrypt.co/feed",
   "https://www.theblock.co/rss.xml",
@@ -33,20 +38,67 @@ const FEEDS = [
   "https://www.cryptopolitan.com/feed",
   "https://zycrypto.com/feed",
   "https://ambcrypto.com/feed",
-  "https://www.coindesk.com/arc/outboundfeeds/rss/"
+  "https://www.coindesk.com/arc/outboundfeeds/rss/",
+
+  // Stock market / macro / gold / commodities
+  "https://www.investing.com/rss/news_25.rss",
+  "https://www.investing.com/rss/news_95.rss",
+  "https://www.investing.com/rss/news_301.rss",
+  "https://www.investing.com/rss/news_11.rss"
 ];
 
-function loadPosted() {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadJson(file, fallback) {
   try {
-    if (!fs.existsSync(POSTED_FILE)) return [];
-    return JSON.parse(fs.readFileSync(POSTED_FILE, "utf8"));
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
-    return [];
+    return fallback;
   }
 }
 
+function saveJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+function loadPosted() {
+  return loadJson(POSTED_FILE, []);
+}
+
 function savePosted(items) {
-  fs.writeFileSync(POSTED_FILE, JSON.stringify(items.slice(-800), null, 2));
+  saveJson(POSTED_FILE, items.slice(-1200));
+}
+
+function loadDailyLimit() {
+  const daily = loadJson(DAILY_LIMIT_FILE, { date: todayKey(), count: 0 });
+
+  if (daily.date !== todayKey()) {
+    return { date: todayKey(), count: 0 };
+  }
+
+  return daily;
+}
+
+function saveDailyLimit(daily) {
+  saveJson(DAILY_LIMIT_FILE, daily);
+}
+
+function canPostMoreNews() {
+  const daily = loadDailyLimit();
+  return daily.count < MAX_NEWS_PER_DAY;
+}
+
+function increaseDailyNewsCount() {
+  const daily = loadDailyLimit();
+  daily.count += 1;
+  saveDailyLimit(daily);
 }
 
 function cleanText(text = "") {
@@ -56,6 +108,7 @@ function cleanText(text = "") {
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
     .replace(/&#8217;/g, "'")
     .replace(/&#8220;/g, '"')
     .replace(/&#8221;/g, '"')
@@ -97,8 +150,76 @@ function getDescription(item) {
   );
 }
 
+function getFullText(item) {
+  return `${item.title || ""} ${getDescription(item)} ${item.content || ""} ${item.contentEncoded || ""}`.toLowerCase();
+}
+
+function detectCategory(item) {
+  const text = getFullText(item);
+
+  if (
+    text.includes("gold") ||
+    text.includes("xau") ||
+    text.includes("silver") ||
+    text.includes("oil") ||
+    text.includes("commodity") ||
+    text.includes("commodities") ||
+    text.includes("brent") ||
+    text.includes("wti")
+  ) return "Gold / Commodities";
+
+  if (
+    text.includes("fed") ||
+    text.includes("federal reserve") ||
+    text.includes("ecb") ||
+    text.includes("inflation") ||
+    text.includes("cpi") ||
+    text.includes("ppi") ||
+    text.includes("interest rate") ||
+    text.includes("rate cut") ||
+    text.includes("rate hike") ||
+    text.includes("dollar") ||
+    text.includes("dxy") ||
+    text.includes("gdp") ||
+    text.includes("recession") ||
+    text.includes("jobs report") ||
+    text.includes("unemployment")
+  ) return "Macro";
+
+  if (
+    text.includes("nasdaq") ||
+    text.includes("s&p 500") ||
+    text.includes("dow jones") ||
+    text.includes("wall street") ||
+    text.includes("stock market") ||
+    text.includes("stocks") ||
+    text.includes("nvidia") ||
+    text.includes("apple") ||
+    text.includes("microsoft") ||
+    text.includes("tesla")
+  ) return "Stocks";
+
+  return "Crypto";
+}
+
+function isRelevantMarketNews(item) {
+  const text = getFullText(item);
+
+  const keywords = [
+    "bitcoin", "btc", "ethereum", "eth", "solana", "sol", "xrp", "crypto", "blockchain",
+    "binance", "coinbase", "kraken", "etf", "sec", "whale", "institutional",
+    "fed", "federal reserve", "ecb", "inflation", "cpi", "ppi", "interest rate",
+    "rate cut", "rate hike", "dollar", "dxy", "gdp", "recession", "jobs report", "unemployment",
+    "nasdaq", "s&p 500", "dow jones", "wall street", "stocks", "stock market",
+    "nvidia", "apple", "microsoft", "tesla",
+    "gold", "xau", "silver", "oil", "commodity", "commodities", "brent", "wti"
+  ];
+
+  return keywords.some(keyword => text.includes(keyword));
+}
+
 function detectImpact(item) {
-  const text = `${item.title || ""} ${getDescription(item)}`.toLowerCase();
+  const text = getFullText(item);
 
   if (
     text.includes("breaking") ||
@@ -106,9 +227,14 @@ function detectImpact(item) {
     text.includes("exploit") ||
     text.includes("liquidation") ||
     text.includes("crash") ||
+    text.includes("plunge") ||
+    text.includes("surge") ||
     text.includes("lawsuit") ||
     text.includes("sec charges") ||
-    text.includes("bankruptcy")
+    text.includes("bankruptcy") ||
+    text.includes("emergency") ||
+    text.includes("war") ||
+    text.includes("attack")
   ) return "Breaking";
 
   if (
@@ -119,7 +245,19 @@ function detectImpact(item) {
     text.includes("coinbase") ||
     text.includes("kraken") ||
     text.includes("sec") ||
-    text.includes("fed") ||
+        text.includes("fed") ||
+    text.includes("federal reserve") ||
+    text.includes("ecb") ||
+    text.includes("cpi") ||
+    text.includes("inflation") ||
+    text.includes("rate cut") ||
+    text.includes("rate hike") ||
+    text.includes("jobs report") ||
+    text.includes("nasdaq") ||
+    text.includes("s&p 500") ||
+    text.includes("dow jones") ||
+    text.includes("wall street") ||
+    text.includes("gold hits") ||
     text.includes("whale") ||
     text.includes("institutional")
   ) return "High";
@@ -131,11 +269,16 @@ function detectImpact(item) {
     text.includes("eth") ||
     text.includes("solana") ||
     text.includes("sol") ||
+    text.includes("xrp") ||
     text.includes("market") ||
     text.includes("price") ||
     text.includes("trader") ||
     text.includes("analyst") ||
-    text.includes("crypto")
+    text.includes("crypto") ||
+    text.includes("stocks") ||
+    text.includes("gold") ||
+    text.includes("oil") ||
+    text.includes("dollar")
   ) return "Medium";
 
   return "Low";
@@ -156,8 +299,9 @@ function getSourceName(feedTitle = "", feedUrl = "") {
   if (text.includes("zycrypto")) return "ZyCrypto";
   if (text.includes("ambcrypto")) return "AMBCrypto";
   if (text.includes("coindesk")) return "CoinDesk";
+  if (text.includes("investing.com")) return "Investing.com";
 
-  return "Crypto News";
+  return "Market News";
 }
 
 function getImageUrl(item) {
@@ -194,11 +338,11 @@ function isTooOld(item) {
   if (Number.isNaN(date.getTime())) return false;
 
   const ageHours = (Date.now() - date.getTime()) / 3600000;
-  return ageHours > 6;
+  return ageHours > NEWS_MAX_AGE_HOURS;
 }
 
 function isWeakNews(item) {
-  const text = `${item.title || ""} ${getDescription(item)}`.toLowerCase();
+  const text = getFullText(item);
 
   return (
     text.includes("podcast") ||
@@ -243,12 +387,14 @@ async function createPremiumCard(item) {
 }
 
 function formatCaption(item, sourceName) {
+  const category = escapeHtml(detectCategory(item));
   const description = escapeHtml(getDescription(item));
   const impact = escapeHtml(detectImpact(item));
 
   return `<b>${escapeHtml(sourceName)}</b>
+<b>${category}</b>
 ${description}
-<b>Impact:</b> ${impact}`;
+<b>Market Impact:</b> ${impact}`;
 }
 
 async function postNews(item, sourceName) {
@@ -269,6 +415,8 @@ async function postNews(item, sourceName) {
       ]
     }
   });
+
+  increaseDailyNewsCount();
 }
 
 async function checkNews() {
@@ -277,19 +425,27 @@ async function checkNews() {
     return;
   }
 
+  if (!canPostMoreNews()) {
+    console.log(`Daily news limit reached: ${MAX_NEWS_PER_DAY}`);
+    return;
+  }
+
   const posted = loadPosted();
 
   for (const feedUrl of FEEDS) {
+    if (!canPostMoreNews()) break;
+
     try {
       const feed = await parser.parseURL(feedUrl);
       const sourceName = getSourceName(feed.title || "", feedUrl);
 
       console.log("RSS FEED:", sourceName, "ITEMS:", feed.items.length);
 
-      const items = feed.items.slice(0, 4);
+      const items = feed.items.slice(0, 5);
       let postedFromThisFeed = 0;
 
       for (const item of items) {
+        if (!canPostMoreNews()) break;
         if (postedFromThisFeed >= 1) break;
 
         const imageUrl = getImageUrl(item);
@@ -306,12 +462,17 @@ async function checkNews() {
         }
 
         if (isTooOld(item)) {
-          console.log("Skipped - older than 6h:", item.title);
+          console.log(`Skipped - older than ${NEWS_MAX_AGE_HOURS}h:`, item.title);
           continue;
         }
 
         if (isWeakNews(item)) {
           console.log("Skipped - weak news:", item.title);
+          continue;
+        }
+
+        if (!isRelevantMarketNews(item)) {
+          console.log("Skipped - not relevant market news:", item.title);
           continue;
         }
 
@@ -330,7 +491,7 @@ async function checkNews() {
 
         console.log("Posted:", item.title);
 
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await sleep(3000);
       }
     } catch (err) {
       console.log("Feed error:", feedUrl, err.message);
@@ -339,6 +500,8 @@ async function checkNews() {
 }
 
 bot.onText(/\/status/, (msg) => {
+  const daily = loadDailyLimit();
+
   bot.sendMessage(
     msg.chat.id,
     `WAI News Bot
@@ -349,21 +512,30 @@ Feeds: ${FEEDS.length}
 Channel: ${TELEGRAM_CHANNEL_ID || "Not set"}
 
 Post style: Clean newspaper card
+Daily posts: ${daily.count}/${MAX_NEWS_PER_DAY}
+Max age: ${NEWS_MAX_AGE_HOURS}h
+
+Categories:
+- Crypto
+- Stocks
+- Gold / Commodities
+- Macro
+
 Filters:
 - Breaking / High / Medium only
 - Low impact skipped
 - Duplicate titles skipped
 - Articles without image skipped
-- Max age: 6h
-- Max 1 article per feed`
+- Weak/sponsored content skipped
+- Max 1 article per feed per check`
   );
 });
 
 bot.onText(/\/testnews/, async (msg) => {
   const testItem = {
-    title: "Bitcoin Reclaims Key Support As Traders Watch Market Momentum",
+    title: "Gold and Bitcoin Rise as Traders Watch Fed Rate Cut Expectations",
     contentSnippet:
-      "Bitcoin traders are monitoring key support and resistance levels as market volatility increases. Eased ETF selling and improving risk appetite are being offset by cautious institutional flows.",
+      "Markets are watching the Federal Reserve, gold, Bitcoin and major stock indexes as investors adjust risk exposure ahead of key economic data.",
     link: "https://cointelegraph.com/",
     enclosure: {
       url: "https://images.unsplash.com/photo-1621504450181-5d356f61d307?w=1200"
@@ -371,11 +543,15 @@ bot.onText(/\/testnews/, async (msg) => {
     pubDate: new Date().toUTCString()
   };
 
-  await postNews(testItem, "Cointelegraph");
+  await postNews(testItem, "WAI Test News");
   bot.sendMessage(msg.chat.id, "Test news sent");
 });
 
 console.log("WAI News Bot started");
+console.log("Interval:", CHECK_INTERVAL_MINUTES, "minutes");
+console.log("Max news/day:", MAX_NEWS_PER_DAY);
+console.log("Max age:", NEWS_MAX_AGE_HOURS, "hours");
+console.log("Feeds:", FEEDS.length);
 
 checkNews();
 setInterval(checkNews, CHECK_INTERVAL_MINUTES * 60 * 1000);
